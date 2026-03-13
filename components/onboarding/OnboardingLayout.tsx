@@ -45,7 +45,7 @@ export default function OnboardingLayout() {
     } else {
       // Complete onboarding
       console.log('Onboarding complete:', data);
-      router.push('/dashboard'); // Redirect to dashboard
+      router.push('/profile'); // Redirect to profile page
     }
   };
 
