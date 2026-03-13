@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import InputField from './InputField';
 import AuthButton from './AuthButton';
 
 export default function AuthCard() {
+  const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -59,10 +61,15 @@ export default function AuthCard() {
     setLoading(true);
     
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     setLoading(false);
     console.log('Form submitted:', formData);
+    
+    // Redirect to onboarding if signing up
+    if (isSignUp) {
+      router.push('/onboarding');
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
