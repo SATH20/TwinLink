@@ -41,3 +41,7 @@ secrets.py
 # OS
 .DS_Store
 Thumbs.db
+
+# Documentation (except README)
+*.md
+!README.md

@@ -77,3 +77,7 @@ fastapi-engine/*.key
 *.db
 *.sqlite
 *.sqlite3
+
+# Documentation (except README)
+*.md
+!README.md
