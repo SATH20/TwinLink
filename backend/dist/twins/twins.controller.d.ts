@@ -8,11 +8,13 @@ export declare class TwinsController {
     };
     createTwin(createTwinDto: CreateTwinDto): Promise<{
         message: string;
+        twinId: string;
         data: any;
         error?: undefined;
     } | {
         message: string;
         error: any;
+        twinId?: undefined;
         data?: undefined;
     }>;
 }

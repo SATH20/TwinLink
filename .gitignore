@@ -32,6 +32,13 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +46,34 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Firebase credentials
+private.json
+serviceAccountKey.json
+firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
+
+# API Keys and Secrets
+secrets/
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+config/secrets.ts
+config/secrets.js
+
+# Backend specific
+backend/private.json
+backend/secrets/
+backend/*.key
+
+# FastAPI specific
+fastapi-engine/.env
+fastapi-engine/secrets/
+fastapi-engine/*.key
+
+# Database
+*.db
+*.sqlite
+*.sqlite3

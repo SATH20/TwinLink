@@ -32,7 +32,34 @@ coverage/
 # Environment variables
 .env
 .env.local
+.env.development
+.env.test
+.env.production
 .env.*.local
+*.env
+!.env.example
+
+# Firebase credentials
+private.json
+serviceAccountKey.json
+firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
+
+# API Keys and Secrets
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.crt
+config/secrets.ts
+config/secrets.js
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
 # Temp files
 *.tmp
