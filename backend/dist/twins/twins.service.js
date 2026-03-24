@@ -59,6 +59,63 @@ let TwinsService = class TwinsService {
             };
         }
     }
+    async getTopMatches(currentTwinId) {
+        console.log('Finding matches for twin:', currentTwinId);
+        try {
+            const snapshot = await firebase_config_1.db.collection('twins').get();
+            if (snapshot.empty) {
+                return {
+                    message: 'No twins found in database',
+                    matches: [],
+                };
+            }
+            const allTwins = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
+            const currentTwin = allTwins.find(twin => twin.id === currentTwinId);
+            if (!currentTwin) {
+                return {
+                    message: 'Twin not found',
+                    error: 'The specified twin ID does not exist',
+                };
+            }
+            const otherTwins = allTwins.filter(twin => twin.id !== currentTwinId);
+            if (otherTwins.length === 0) {
+                return {
+                    message: 'No other twins available for matching',
+                    matches: [],
+                };
+            }
+            const matchRequest = {
+                twin1: currentTwin.twinProfile,
+                twins: otherTwins.map(twin => ({
+                    id: twin.id,
+                    ...twin.twinProfile,
+                })),
+            };
+            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('http://localhost:8000/match-twins', matchRequest));
+            console.log('Matching results:', response.data);
+            return {
+                message: 'Top matches found successfully',
+                currentTwinId: currentTwinId,
+                matches: response.data.matches,
+            };
+        }
+        catch (error) {
+            console.error('Matching error:', error.message);
+            if (error.code === 'ECONNREFUSED') {
+                return {
+                    message: 'AI service unavailable',
+                    error: 'FastAPI service is not running',
+                };
+            }
+            return {
+                message: 'Failed to find matches',
+                error: error.message,
+            };
+        }
+    }
 };
 exports.TwinsService = TwinsService;
 exports.TwinsService = TwinsService = __decorate([

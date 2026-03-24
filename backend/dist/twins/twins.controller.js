@@ -27,6 +27,9 @@ let TwinsController = class TwinsController {
     createTwin(createTwinDto) {
         return this.twinsService.createTwin(createTwinDto);
     }
+    getTopMatches(id) {
+        return this.twinsService.getTopMatches(id);
+    }
 };
 exports.TwinsController = TwinsController;
 __decorate([
@@ -42,6 +45,13 @@ __decorate([
     __metadata("design:paramtypes", [create_twin_dto_1.CreateTwinDto]),
     __metadata("design:returntype", void 0)
 ], TwinsController.prototype, "createTwin", null);
+__decorate([
+    (0, common_1.Get)('matches/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], TwinsController.prototype, "getTopMatches", null);
 exports.TwinsController = TwinsController = __decorate([
     (0, common_1.Controller)('twin'),
     __metadata("design:paramtypes", [twins_service_1.TwinsService])

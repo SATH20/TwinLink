@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
+from matching import find_top_matches
 
 app = FastAPI()
 
@@ -19,6 +20,10 @@ class TwinInput(BaseModel):
     communicationStyle: str
     goals: str
     personality: Dict[str, Any]
+
+class MatchRequest(BaseModel):
+    twin1: Dict[str, Any]
+    twins: List[Dict[str, Any]]
 
 @app.post("/generate-twin")
 async def generate_twin(data: TwinInput):
@@ -44,6 +49,16 @@ async def generate_twin(data: TwinInput):
     }
     
     return twin_profile
+
+@app.post("/match-twins")
+async def match_twins(data: MatchRequest):
+    """Find top compatible matches for a twin"""
+    
+    matches = find_top_matches(data.twin1, data.twins, top_n=5)
+    
+    return {
+        "matches": matches
+    }
 
 @app.get("/")
 async def root():

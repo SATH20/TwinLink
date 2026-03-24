@@ -17,4 +17,20 @@ export declare class TwinsController {
         twinId?: undefined;
         data?: undefined;
     }>;
+    getTopMatches(id: string): Promise<{
+        message: string;
+        matches: never[];
+        currentTwinId?: undefined;
+        error?: undefined;
+    } | {
+        message: string;
+        currentTwinId: string;
+        matches: any;
+        error?: undefined;
+    } | {
+        message: string;
+        error: any;
+        matches?: undefined;
+        currentTwinId?: undefined;
+    }>;
 }
