@@ -37,3 +37,7 @@ coverage/
 # Temp files
 *.tmp
 .cache/
+
+# Documentation (except README)
+*.md
+!README.md

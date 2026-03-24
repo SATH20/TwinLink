@@ -8,10 +8,14 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TwinsController = void 0;
 const common_1 = require("@nestjs/common");
 const twins_service_1 = require("./twins.service");
+const create_twin_dto_1 = require("./dto/create-twin.dto");
 let TwinsController = class TwinsController {
     twinsService;
     constructor(twinsService) {
@@ -19,6 +23,9 @@ let TwinsController = class TwinsController {
     }
     findAll() {
         return this.twinsService.findAll();
+    }
+    createTwin(createTwinDto) {
+        return this.twinsService.createTwin(createTwinDto);
     }
 };
 exports.TwinsController = TwinsController;
@@ -28,8 +35,15 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], TwinsController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Post)('create'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_twin_dto_1.CreateTwinDto]),
+    __metadata("design:returntype", void 0)
+], TwinsController.prototype, "createTwin", null);
 exports.TwinsController = TwinsController = __decorate([
-    (0, common_1.Controller)('twins'),
+    (0, common_1.Controller)('twin'),
     __metadata("design:paramtypes", [twins_service_1.TwinsService])
 ], TwinsController);
 //# sourceMappingURL=twins.controller.js.map
