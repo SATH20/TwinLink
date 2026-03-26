@@ -20,14 +20,21 @@ export class TwinsService {
       const response = await firstValueFrom(
         this.httpService.post(
           'http://localhost:8000/generate-twin',
-          createTwinDto
+          {
+            interests: createTwinDto.interests,
+            communicationStyle: createTwinDto.communicationStyle,
+            goals: createTwinDto.goals,
+            personality: createTwinDto.personality,
+          }
         )
       );
 
       console.log('FastAPI response:', response.data);
 
-      // Prepare document for Firestore
+      // Prepare twin document for Firestore
       const twinDocument = {
+        userId: createTwinDto.userId,
+        category: createTwinDto.category,
         userInput: {
           interests: createTwinDto.interests,
           communicationStyle: createTwinDto.communicationStyle,
@@ -38,15 +45,39 @@ export class TwinsService {
         createdAt: new Date(),
       };
 
-      // Save to Firestore
-      const docRef = await db.collection('twins').add(twinDocument);
+      // Save twin to Firestore
+      const twinRef = await db.collection('twins').add(twinDocument);
+      const twinId = twinRef.id;
 
-      console.log('Saved to Firestore with ID:', docRef.id);
+      console.log('Saved twin to Firestore with ID:', twinId);
+
+      // Check if user already exists
+      const userDoc = await db.collection('users').doc(createTwinDto.userId).get();
+
+      if (userDoc.exists) {
+        // Update existing user with new twinId
+        await db.collection('users').doc(createTwinDto.userId).update({
+          twinId: twinId,
+          category: createTwinDto.category,
+          updatedAt: new Date(),
+        });
+        console.log('Updated existing user:', createTwinDto.userId);
+      } else {
+        // Create new user document
+        await db.collection('users').doc(createTwinDto.userId).set({
+          userId: createTwinDto.userId,
+          email: createTwinDto.email,
+          twinId: twinId,
+          category: createTwinDto.category,
+          createdAt: new Date(),
+        });
+        console.log('Created new user:', createTwinDto.userId);
+      }
 
       // Return response
       return {
         message: 'Twin created & stored successfully',
-        twinId: docRef.id,
+        twinId: twinId,
         data: response.data.twinProfile,
       };
     } catch (error) {
@@ -71,8 +102,26 @@ export class TwinsService {
     console.log('Finding matches for twin:', currentTwinId);
 
     try {
-      // Fetch all twins from Firestore
-      const snapshot = await db.collection('twins').get();
+      // Fetch current twin
+      const currentTwinDoc = await db.collection('twins').doc(currentTwinId).get();
+
+      if (!currentTwinDoc.exists) {
+        return {
+          message: 'Twin not found',
+          error: 'The specified twin ID does not exist',
+        };
+      }
+
+      const currentTwin = {
+        id: currentTwinDoc.id,
+        ...currentTwinDoc.data(),
+      } as any;
+
+      // Fetch twins with same category, excluding current user
+      const snapshot = await db
+        .collection('twins')
+        .where('category', '==', currentTwin.category)
+        .get();
 
       if (snapshot.empty) {
         return {
@@ -81,24 +130,13 @@ export class TwinsService {
         };
       }
 
-      // Convert snapshot to array
-      const allTwins = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
-
-      // Find current twin
-      const currentTwin = allTwins.find(twin => twin.id === currentTwinId);
-
-      if (!currentTwin) {
-        return {
-          message: 'Twin not found',
-          error: 'The specified twin ID does not exist',
-        };
-      }
-
-      // Remove current twin from list
-      const otherTwins = allTwins.filter(twin => twin.id !== currentTwinId);
+      // Convert snapshot to array and exclude current twin
+      const otherTwins = snapshot.docs
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+        .filter(twin => twin.id !== currentTwinId) as any[];
 
       if (otherTwins.length === 0) {
         return {
@@ -126,11 +164,13 @@ export class TwinsService {
 
       console.log('Matching results:', response.data);
 
-      // Return top matches
+      // Return top 5 matches
+      const topMatches = response.data.matches.slice(0, 5);
+
       return {
         message: 'Top matches found successfully',
         currentTwinId: currentTwinId,
-        matches: response.data.matches,
+        matches: topMatches,
       };
     } catch (error) {
       console.error('Matching error:', error.message);
@@ -145,6 +185,37 @@ export class TwinsService {
       return {
         message: 'Failed to find matches',
         error: error.message,
+      };
+    }
+  }
+
+  async getUserByUserId(userId: string) {
+    console.log('Checking user:', userId);
+
+    try {
+      const userDoc = await db.collection('users').doc(userId).get();
+
+      if (!userDoc.exists) {
+        return {
+          message: 'User not found',
+          twinId: null,
+        };
+      }
+
+      const userData = userDoc.data();
+
+      return {
+        message: 'User found',
+        twinId: userData?.twinId || null,
+        category: userData?.category || null,
+        email: userData?.email || null,
+      };
+    } catch (error) {
+      console.error('Error fetching user:', error.message);
+      return {
+        message: 'Failed to fetch user',
+        error: error.message,
+        twinId: null,
       };
     }
   }

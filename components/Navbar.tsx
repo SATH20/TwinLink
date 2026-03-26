@@ -3,6 +3,7 @@
 import { Moon, Sparkles, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import Link from 'next/link';
+import { Show, UserButton } from '@clerk/nextjs';
 
 export default function Navbar() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -47,13 +48,29 @@ export default function Navbar() {
               )}
             </button>
 
-            <button className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300 font-medium">
-              <Link href="/auth">Sign In</Link>
-            </button>
+            <Show when="signed-out">
+              <Link href="/sign-in">
+                <button className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300 font-medium">
+                  Sign In
+                </button>
+              </Link>
 
-            <button className="px-6 py-2 rounded-full bg-blue-600 dark:bg-blue-500 text-white font-medium hover:bg-blue-700 dark:hover:bg-blue-600 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300">
-              <Link href="/auth">Get Started</Link>
-            </button>
+              <Link href="/sign-up">
+                <button className="px-6 py-2 rounded-full bg-blue-600 dark:bg-blue-500 text-white font-medium hover:bg-blue-700 dark:hover:bg-blue-600 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30 transition-all duration-300">
+                  Get Started
+                </button>
+              </Link>
+            </Show>
+
+            <Show when="signed-in">
+              <UserButton 
+                appearance={{
+                  elements: {
+                    avatarBox: "w-10 h-10"
+                  }
+                }}
+              />
+            </Show>
           </div>
         </div>
       </div>

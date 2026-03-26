@@ -33,4 +33,23 @@ export declare class TwinsService {
         matches?: undefined;
         currentTwinId?: undefined;
     }>;
+    getUserByUserId(userId: string): Promise<{
+        message: string;
+        twinId: null;
+        category?: undefined;
+        email?: undefined;
+        error?: undefined;
+    } | {
+        message: string;
+        twinId: any;
+        category: any;
+        email: any;
+        error?: undefined;
+    } | {
+        message: string;
+        error: any;
+        twinId: null;
+        category?: undefined;
+        email?: undefined;
+    }>;
 }

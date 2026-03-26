@@ -20,4 +20,9 @@ export class TwinsController {
   getTopMatches(@Param('id') id: string) {
     return this.twinsService.getTopMatches(id);
   }
+
+  @Get('user/:userId')
+  getUserByUserId(@Param('userId') userId: string) {
+    return this.twinsService.getUserByUserId(userId);
+  }
 }

@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import ProgressBar from './ProgressBar';
 import OptionCard from './OptionCard';
 import ChipSelector from './ChipSelector';
 import PersonalitySlider from './PersonalitySlider';
+import { createTwin } from '@/lib/api';
 
 interface OnboardingData {
   role: string;
@@ -24,7 +26,10 @@ interface OnboardingData {
 
 export default function OnboardingLayout() {
   const router = useRouter();
+  const { user, isLoaded } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<OnboardingData>({
     role: '',
     interests: [],
@@ -39,13 +44,51 @@ export default function OnboardingLayout() {
 
   const totalSteps = 5;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     } else {
-      // Complete onboarding
-      console.log('Onboarding complete:', data);
-      router.push('/profile'); // Redirect to profile page
+      // Complete onboarding - submit to backend
+      await handleSubmit();
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!isLoaded || !user) {
+      setError('User not authenticated. Please sign in.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const payload = {
+        userId: user.id,
+        email: user.primaryEmailAddress?.emailAddress || '',
+        interests: data.interests,
+        communicationStyle: data.conversationStyle,
+        goals: data.lookingFor,
+        personality: data.personality,
+        category: data.lookingFor, // Using lookingFor as category
+      };
+
+      console.log('Submitting twin data:', payload);
+
+      const response = await createTwin(payload);
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      console.log('Twin created successfully:', response);
+
+      // Redirect to dashboard on success
+      router.push('/dashboard');
+    } catch (err) {
+      console.error('Error creating twin:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create twin. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
@@ -272,6 +315,13 @@ export default function OnboardingLayout() {
           </motion.div>
         </AnimatePresence>
 
+        {/* Error Message */}
+        {error && (
+          <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
         {/* Navigation Buttons */}
         <div className="flex items-center justify-between mt-12">
           <button
@@ -289,15 +339,24 @@ export default function OnboardingLayout() {
 
           <button
             onClick={handleNext}
-            disabled={!canProceed()}
+            disabled={!canProceed() || isSubmitting}
             className={`flex items-center gap-2 px-8 py-3 rounded-lg font-semibold transition-all duration-300 ${
-              canProceed()
+              canProceed() && !isSubmitting
                 ? 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600 hover:shadow-lg'
                 : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed'
             }`}
           >
-            {currentStep === totalSteps ? 'Complete' : 'Next'}
-            <ArrowRight className="w-5 h-5" />
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Creating Twin...
+              </>
+            ) : (
+              <>
+                {currentStep === totalSteps ? 'Complete' : 'Next'}
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
           </button>
         </div>
       </div>

@@ -81,3 +81,6 @@ fastapi-engine/*.key
 # Documentation (except README)
 *.md
 !README.md
+
+# clerk configuration (can include secrets)
+/.clerk/

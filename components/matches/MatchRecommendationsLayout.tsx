@@ -1,62 +1,32 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import MatchGrid from './MatchGrid';
 
-export default function MatchRecommendationsLayout() {
-  // Mock data - in real app, this would come from API
-  const matches = [
-    {
-      id: '1',
-      name: 'Sarah Mitchell',
-      initials: 'SM',
-      compatibility: 87,
-      interests: ['AI', 'Gaming', 'Technology'],
-      gradient: 'from-blue-500 to-emerald-500',
-    },
-    {
-      id: '2',
-      name: 'Jordan Lee',
-      initials: 'JL',
-      compatibility: 92,
-      interests: ['Music', 'Movies', 'Reading'],
-      gradient: 'from-purple-500 to-pink-500',
-    },
-    {
-      id: '3',
-      name: 'Taylor Chen',
-      initials: 'TC',
-      compatibility: 85,
-      interests: ['Technology', 'Travel', 'Photography'],
-      gradient: 'from-orange-500 to-red-500',
-    },
-    {
-      id: '4',
-      name: 'Morgan Davis',
-      initials: 'MD',
-      compatibility: 89,
-      interests: ['Gaming', 'AI', 'Fitness'],
-      gradient: 'from-teal-500 to-cyan-500',
-    },
-    {
-      id: '5',
-      name: 'Riley Parker',
-      initials: 'RP',
-      compatibility: 83,
-      interests: ['Movies', 'Music', 'Art'],
-      gradient: 'from-indigo-500 to-blue-500',
-    },
-    {
-      id: '6',
-      name: 'Casey Johnson',
-      initials: 'CJ',
-      compatibility: 90,
-      interests: ['Technology', 'Gaming', 'Cooking'],
-      gradient: 'from-emerald-500 to-green-500',
-    },
-  ];
+interface Match {
+  id: string;
+  matchScore: number;
+  reason: string;
+  interests: string[];
+}
+
+interface MatchRecommendationsLayoutProps {
+  matches: Match[];
+  isLoading: boolean;
+}
+
+export default function MatchRecommendationsLayout({ matches, isLoading }: MatchRecommendationsLayoutProps) {
+  // Transform API matches to component format
+  const formattedMatches = matches.map((match, index) => ({
+    id: match.id,
+    name: `Match #${index + 1}`,
+    initials: `M${index + 1}`,
+    compatibility: Math.round(match.matchScore * 100),
+    interests: match.interests,
+    gradient: getGradient(index),
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 dark:bg-gradient-to-b dark:from-slate-900 dark:to-slate-950 transition-colors duration-300">
@@ -97,10 +67,43 @@ export default function MatchRecommendationsLayout() {
             </p>
           </motion.div>
 
+          {/* Loading State */}
+          {isLoading && (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <Loader2 className="w-12 h-12 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+                <p className="text-slate-600 dark:text-slate-400">Finding your matches...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoading && matches.length === 0 && (
+            <div className="text-center py-20">
+              <p className="text-xl text-slate-600 dark:text-slate-400">No matches found yet</p>
+              <p className="text-slate-500 dark:text-slate-500 mt-2">
+                Check back soon for new connections!
+              </p>
+            </div>
+          )}
+
           {/* Match Grid */}
-          <MatchGrid matches={matches} />
+          {!isLoading && matches.length > 0 && <MatchGrid matches={formattedMatches} />}
         </div>
       </div>
     </div>
   );
+}
+
+// Helper function to get gradient based on index
+function getGradient(index: number): string {
+  const gradients = [
+    'from-blue-500 to-emerald-500',
+    'from-purple-500 to-pink-500',
+    'from-orange-500 to-red-500',
+    'from-teal-500 to-cyan-500',
+    'from-indigo-500 to-blue-500',
+    'from-emerald-500 to-green-500',
+  ];
+  return gradients[index % gradients.length];
 }

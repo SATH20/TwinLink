@@ -30,6 +30,9 @@ let TwinsController = class TwinsController {
     getTopMatches(id) {
         return this.twinsService.getTopMatches(id);
     }
+    getUserByUserId(userId) {
+        return this.twinsService.getUserByUserId(userId);
+    }
 };
 exports.TwinsController = TwinsController;
 __decorate([
@@ -52,6 +55,13 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], TwinsController.prototype, "getTopMatches", null);
+__decorate([
+    (0, common_1.Get)('user/:userId'),
+    __param(0, (0, common_1.Param)('userId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], TwinsController.prototype, "getUserByUserId", null);
 exports.TwinsController = TwinsController = __decorate([
     (0, common_1.Controller)('twin'),
     __metadata("design:paramtypes", [twins_service_1.TwinsService])

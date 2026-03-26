@@ -25,9 +25,16 @@ let TwinsService = class TwinsService {
     async createTwin(createTwinDto) {
         console.log('Received twin data:', createTwinDto);
         try {
-            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('http://localhost:8000/generate-twin', createTwinDto));
+            const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('http://localhost:8000/generate-twin', {
+                interests: createTwinDto.interests,
+                communicationStyle: createTwinDto.communicationStyle,
+                goals: createTwinDto.goals,
+                personality: createTwinDto.personality,
+            }));
             console.log('FastAPI response:', response.data);
             const twinDocument = {
+                userId: createTwinDto.userId,
+                category: createTwinDto.category,
                 userInput: {
                     interests: createTwinDto.interests,
                     communicationStyle: createTwinDto.communicationStyle,
@@ -37,11 +44,31 @@ let TwinsService = class TwinsService {
                 twinProfile: response.data.twinProfile,
                 createdAt: new Date(),
             };
-            const docRef = await firebase_config_1.db.collection('twins').add(twinDocument);
-            console.log('Saved to Firestore with ID:', docRef.id);
+            const twinRef = await firebase_config_1.db.collection('twins').add(twinDocument);
+            const twinId = twinRef.id;
+            console.log('Saved twin to Firestore with ID:', twinId);
+            const userDoc = await firebase_config_1.db.collection('users').doc(createTwinDto.userId).get();
+            if (userDoc.exists) {
+                await firebase_config_1.db.collection('users').doc(createTwinDto.userId).update({
+                    twinId: twinId,
+                    category: createTwinDto.category,
+                    updatedAt: new Date(),
+                });
+                console.log('Updated existing user:', createTwinDto.userId);
+            }
+            else {
+                await firebase_config_1.db.collection('users').doc(createTwinDto.userId).set({
+                    userId: createTwinDto.userId,
+                    email: createTwinDto.email,
+                    twinId: twinId,
+                    category: createTwinDto.category,
+                    createdAt: new Date(),
+                });
+                console.log('Created new user:', createTwinDto.userId);
+            }
             return {
                 message: 'Twin created & stored successfully',
-                twinId: docRef.id,
+                twinId: twinId,
                 data: response.data.twinProfile,
             };
         }
@@ -62,25 +89,33 @@ let TwinsService = class TwinsService {
     async getTopMatches(currentTwinId) {
         console.log('Finding matches for twin:', currentTwinId);
         try {
-            const snapshot = await firebase_config_1.db.collection('twins').get();
+            const currentTwinDoc = await firebase_config_1.db.collection('twins').doc(currentTwinId).get();
+            if (!currentTwinDoc.exists) {
+                return {
+                    message: 'Twin not found',
+                    error: 'The specified twin ID does not exist',
+                };
+            }
+            const currentTwin = {
+                id: currentTwinDoc.id,
+                ...currentTwinDoc.data(),
+            };
+            const snapshot = await firebase_config_1.db
+                .collection('twins')
+                .where('category', '==', currentTwin.category)
+                .get();
             if (snapshot.empty) {
                 return {
                     message: 'No twins found in database',
                     matches: [],
                 };
             }
-            const allTwins = snapshot.docs.map(doc => ({
+            const otherTwins = snapshot.docs
+                .map(doc => ({
                 id: doc.id,
                 ...doc.data(),
-            }));
-            const currentTwin = allTwins.find(twin => twin.id === currentTwinId);
-            if (!currentTwin) {
-                return {
-                    message: 'Twin not found',
-                    error: 'The specified twin ID does not exist',
-                };
-            }
-            const otherTwins = allTwins.filter(twin => twin.id !== currentTwinId);
+            }))
+                .filter(twin => twin.id !== currentTwinId);
             if (otherTwins.length === 0) {
                 return {
                     message: 'No other twins available for matching',
@@ -96,10 +131,11 @@ let TwinsService = class TwinsService {
             };
             const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('http://localhost:8000/match-twins', matchRequest));
             console.log('Matching results:', response.data);
+            const topMatches = response.data.matches.slice(0, 5);
             return {
                 message: 'Top matches found successfully',
                 currentTwinId: currentTwinId,
-                matches: response.data.matches,
+                matches: topMatches,
             };
         }
         catch (error) {
@@ -113,6 +149,33 @@ let TwinsService = class TwinsService {
             return {
                 message: 'Failed to find matches',
                 error: error.message,
+            };
+        }
+    }
+    async getUserByUserId(userId) {
+        console.log('Checking user:', userId);
+        try {
+            const userDoc = await firebase_config_1.db.collection('users').doc(userId).get();
+            if (!userDoc.exists) {
+                return {
+                    message: 'User not found',
+                    twinId: null,
+                };
+            }
+            const userData = userDoc.data();
+            return {
+                message: 'User found',
+                twinId: userData?.twinId || null,
+                category: userData?.category || null,
+                email: userData?.email || null,
+            };
+        }
+        catch (error) {
+            console.error('Error fetching user:', error.message);
+            return {
+                message: 'Failed to fetch user',
+                error: error.message,
+                twinId: null,
             };
         }
     }
