@@ -20,10 +20,10 @@ from app.routers import twin_router, conversation_router, compatibility_router
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Application lifespan: startup and shutdown events."""
-    print(f"🚀 TwinLink AI Engine starting on {settings.HOST}:{settings.PORT}")
-    print(f"🔧 Environment: {settings.ENVIRONMENT}")
+    print(f"[START] TwinLink AI Engine starting on {settings.HOST}:{settings.PORT}")
+    print(f"[CONFIG] Environment: {settings.ENVIRONMENT}")
     yield
-    print("🛑 TwinLink AI Engine shutting down")
+    print("[STOP] TwinLink AI Engine shutting down")
 
 
 app = FastAPI(

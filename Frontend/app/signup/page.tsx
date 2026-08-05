@@ -1,85 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState } from "react"
+import { motion } from "framer-motion"
 import Link from "next/link"
-import { Bot, User, Mail, Lock, ArrowRight, Check, Shield, Sparkles, Network } from "lucide-react"
+import { Bot, Mail, Lock, ArrowRight, Check, Shield, Sparkles, Network, User } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useSignUp } from "@clerk/nextjs"
+import { useSignUp } from "@clerk/nextjs/legacy"
 import { useRouter } from "next/navigation"
-import type { OAuthStrategy } from "@clerk/types"
-
-// Animated Background Component
-const AnimatedBackground = () => {
-  const [nodes, setNodes] = useState<Array<{ x: number; y: number; size: number; delay: number }>>([])
-
-  useEffect(() => {
-    const generateNodes = () => {
-      const newNodes = Array.from({ length: 30 }, () => ({
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        size: Math.random() * 4 + 2,
-        delay: Math.random() * 2,
-      }))
-      setNodes(newNodes)
-    }
-    generateNodes()
-  }, [])
-
-  return (
-    <div className="absolute inset-0 overflow-hidden opacity-30">
-      <svg className="w-full h-full">
-        <defs>
-          <radialGradient id="nodeGradient">
-            <stop offset="0%" stopColor="#156d95" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.2" />
-          </radialGradient>
-        </defs>
-        {nodes.map((node, i) => (
-          <motion.circle
-            key={i}
-            cx={`${node.x}%`}
-            cy={`${node.y}%`}
-            r={node.size}
-            fill="url(#nodeGradient)"
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{
-              opacity: [0.2, 0.8, 0.2],
-              scale: [1, 1.5, 1],
-            }}
-            transition={{
-              duration: 3,
-              delay: node.delay,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          />
-        ))}
-        {/* Connecting Lines */}
-        {nodes.map((node, i) => {
-          const nearbyNode = nodes[i + 1]
-          if (!nearbyNode) return null
-          return (
-            <motion.line
-              key={`line-${i}`}
-              x1={`${node.x}%`}
-              y1={`${node.y}%`}
-              x2={`${nearbyNode.x}%`}
-              y2={`${nearbyNode.y}%`}
-              stroke="#156d95"
-              strokeWidth="0.5"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 0.3 }}
-              transition={{ duration: 2, delay: node.delay }}
-            />
-          )
-        })}
-      </svg>
-    </div>
-  )
-}
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState("")
@@ -111,7 +40,12 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validateForm() || !isLoaded) return
+    if (!validateForm()) return
+
+    if (!isLoaded || !signUp) {
+      setErrors({ submit: "Authentication is still loading. Please refresh the page if this message stays visible." })
+      return
+    }
 
     setIsLoading(true)
 
@@ -139,8 +73,11 @@ export default function SignupPage() {
     }
   }
 
-  const handleSocialSignup = async (provider: OAuthStrategy) => {
-    if (!isLoaded) return
+  const handleSocialSignup = async (provider: "oauth_google" | "oauth_github") => {
+    if (!isLoaded || !signUp) {
+      setErrors({ submit: "Authentication is still loading. Please refresh the page if this message stays visible." })
+      return
+    }
 
     setSocialLoading(provider)
     setErrors({})
@@ -160,7 +97,6 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen w-full flex">
-      {/* Left Side - Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background overflow-y-auto">
         <div className="w-full max-w-md py-8">
           {/* Logo */}
@@ -209,7 +145,6 @@ export default function SignupPage() {
               <motion.div
                 className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#156d95] to-[#0e5a7a] flex items-center justify-center flex-shrink-0"
                 whileHover={{ scale: 1.05, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 400 }}
               >
                 <Bot className="w-5 h-5 text-white" />
               </motion.div>
@@ -248,7 +183,6 @@ export default function SignupPage() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="space-y-3 mb-6"
           >
-            {/* Error Message */}
             {errors.submit && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -265,7 +199,7 @@ export default function SignupPage() {
                 variant="outline"
                 className="w-full h-12 rounded-xl text-base font-medium hover:shadow-md transition-all border-2 hover:bg-gray-50 dark:hover:bg-gray-900 text-foreground"
                 onClick={() => handleSocialSignup("oauth_google")}
-                disabled={!isLoaded || socialLoading !== null}
+                disabled={socialLoading !== null}
               >
                 {socialLoading === "oauth_google" ? (
                   <div className="flex items-center gap-2 text-foreground">
@@ -304,7 +238,7 @@ export default function SignupPage() {
                 variant="outline"
                 className="w-full h-12 rounded-xl text-base font-medium hover:shadow-md transition-all border-2 hover:bg-gray-50 dark:hover:bg-gray-900 text-foreground"
                 onClick={() => handleSocialSignup("oauth_github")}
-                disabled={!isLoaded || socialLoading !== null}
+                disabled={socialLoading !== null}
               >
                 {socialLoading === "oauth_github" ? (
                   <div className="flex items-center gap-2 text-foreground">
@@ -337,7 +271,7 @@ export default function SignupPage() {
             <div className="flex-1 h-px bg-border" />
           </motion.div>
 
-          {/* Form */}
+          {/* Form - Email/Password signup */}
           <motion.form
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -359,11 +293,9 @@ export default function SignupPage() {
                   className="absolute left-3 top-1/2 -translate-y-1/2"
                   animate={{
                     scale: focusedField === "fullName" ? 1.1 : 1,
-                    color: focusedField === "fullName" ? "#156d95" : undefined,
                   }}
-                  transition={{ type: "spring", stiffness: 300 }}
                 >
-                  <User className="w-4 h-4 text-muted-foreground group-hover:text-[#156d95] transition-colors" />
+                  <User className="w-4 h-4 text-muted-foreground" />
                 </motion.div>
                 <Input
                   type="text"
@@ -375,22 +307,12 @@ export default function SignupPage() {
                   }}
                   onFocus={() => setFocusedField("fullName")}
                   onBlur={() => setFocusedField(null)}
-                  className="pl-10 h-11 rounded-xl transition-all duration-200 hover:border-[#156d95]/50"
-                  aria-invalid={!!errors.fullName}
+                  className="pl-10 h-11 rounded-xl transition-all duration-200"
                 />
               </div>
-              <AnimatePresence>
-                {errors.fullName && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="text-xs text-destructive mt-1.5"
-                  >
-                    {errors.fullName}
-                  </motion.p>
-                )}
-              </AnimatePresence>
+              {errors.fullName && (
+                <p className="text-xs text-destructive mt-1.5">{errors.fullName}</p>
+              )}
             </motion.div>
 
             {/* Email */}
@@ -403,16 +325,7 @@ export default function SignupPage() {
                 Email
               </label>
               <div className="relative group">
-                <motion.div
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                  animate={{
-                    scale: focusedField === "email" ? 1.1 : 1,
-                    color: focusedField === "email" ? "#156d95" : undefined,
-                  }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <Mail className="w-4 h-4 text-muted-foreground group-hover:text-[#156d95] transition-colors" />
-                </motion.div>
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   type="email"
                   placeholder="you@example.com"
@@ -421,24 +334,12 @@ export default function SignupPage() {
                     setEmail(e.target.value)
                     setErrors({ ...errors, email: "" })
                   }}
-                  onFocus={() => setFocusedField("email")}
-                  onBlur={() => setFocusedField(null)}
-                  className="pl-10 h-11 rounded-xl transition-all duration-200 hover:border-[#156d95]/50"
-                  aria-invalid={!!errors.email}
+                  className="pl-10 h-11 rounded-xl transition-all duration-200"
                 />
               </div>
-              <AnimatePresence>
-                {errors.email && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="text-xs text-destructive mt-1.5"
-                  >
-                    {errors.email}
-                  </motion.p>
-                )}
-              </AnimatePresence>
+              {errors.email && (
+                <p className="text-xs text-destructive mt-1.5">{errors.email}</p>
+              )}
             </motion.div>
 
             {/* Password */}
@@ -451,16 +352,7 @@ export default function SignupPage() {
                 Password
               </label>
               <div className="relative group">
-                <motion.div
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                  animate={{
-                    scale: focusedField === "password" ? 1.1 : 1,
-                    color: focusedField === "password" ? "#156d95" : undefined,
-                  }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <Lock className="w-4 h-4 text-muted-foreground group-hover:text-[#156d95] transition-colors" />
-                </motion.div>
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -469,24 +361,12 @@ export default function SignupPage() {
                     setPassword(e.target.value)
                     setErrors({ ...errors, password: "" })
                   }}
-                  onFocus={() => setFocusedField("password")}
-                  onBlur={() => setFocusedField(null)}
-                  className="pl-10 h-11 rounded-xl transition-all duration-200 hover:border-[#156d95]/50"
-                  aria-invalid={!!errors.password}
+                  className="pl-10 h-11 rounded-xl transition-all duration-200"
                 />
               </div>
-              <AnimatePresence>
-                {errors.password && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="text-xs text-destructive mt-1.5"
-                  >
-                    {errors.password}
-                  </motion.p>
-                )}
-              </AnimatePresence>
+              {errors.password && (
+                <p className="text-xs text-destructive mt-1.5">{errors.password}</p>
+              )}
             </motion.div>
 
             {/* Confirm Password */}
@@ -499,16 +379,7 @@ export default function SignupPage() {
                 Confirm Password
               </label>
               <div className="relative group">
-                <motion.div
-                  className="absolute left-3 top-1/2 -translate-y-1/2"
-                  animate={{
-                    scale: focusedField === "confirmPassword" ? 1.1 : 1,
-                    color: focusedField === "confirmPassword" ? "#156d95" : undefined,
-                  }}
-                  transition={{ type: "spring", stiffness: 300 }}
-                >
-                  <Lock className="w-4 h-4 text-muted-foreground group-hover:text-[#156d95] transition-colors" />
-                </motion.div>
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -517,24 +388,12 @@ export default function SignupPage() {
                     setConfirmPassword(e.target.value)
                     setErrors({ ...errors, confirmPassword: "" })
                   }}
-                  onFocus={() => setFocusedField("confirmPassword")}
-                  onBlur={() => setFocusedField(null)}
-                  className="pl-10 h-11 rounded-xl transition-all duration-200 hover:border-[#156d95]/50"
-                  aria-invalid={!!errors.confirmPassword}
+                  className="pl-10 h-11 rounded-xl transition-all duration-200"
                 />
               </div>
-              <AnimatePresence>
-                {errors.confirmPassword && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    className="text-xs text-destructive mt-1.5"
-                  >
-                    {errors.confirmPassword}
-                  </motion.p>
-                )}
-              </AnimatePresence>
+              {errors.confirmPassword && (
+                <p className="text-xs text-destructive mt-1.5">{errors.confirmPassword}</p>
+              )}
             </motion.div>
 
             {/* Terms Checkbox */}
@@ -547,7 +406,6 @@ export default function SignupPage() {
                     setAgreeToTerms(!!checked)
                     setErrors({ ...errors, terms: "" })
                   }}
-                  aria-invalid={!!errors.terms}
                   className="mt-1"
                 />
                 <label htmlFor="terms" className="text-sm text-foreground cursor-pointer" style={{ fontFamily: "Figtree" }}>
@@ -570,65 +428,28 @@ export default function SignupPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.85 }}
             >
-              <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-[#156d95] to-[#0e5a7a] hover:from-[#0e5a7a] hover:to-[#156d95] text-white h-12 rounded-xl text-base font-semibold transition-all shadow-lg shadow-[#156d95]/20 hover:shadow-xl hover:shadow-[#156d95]/30"
-                  disabled={isLoading || isSuccess}
-                >
-                  <AnimatePresence mode="wait">
-                    {isSuccess ? (
-                      <motion.div
-                        key="success"
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        className="flex items-center gap-2"
-                      >
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: [0, 1.2, 1] }}
-                          transition={{ duration: 0.5 }}
-                        >
-                          <Check className="w-5 h-5" />
-                        </motion.div>
-                        Twin Created!
-                      </motion.div>
-                    ) : isLoading ? (
-                      <motion.div
-                        key="loading"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="flex items-center gap-2"
-                      >
-                        <motion.div
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                          className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-                        />
-                        Creating your Twin...
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="default"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="flex items-center gap-2"
-                      >
-                        Create My Twin
-                        <motion.div
-                          animate={{ x: [0, 4, 0] }}
-                          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                        >
-                          <ArrowRight className="w-5 h-5" />
-                        </motion.div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Button>
-              </motion.div>
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-[#156d95] to-[#0e5a7a] hover:from-[#0e5a7a] hover:to-[#156d95] text-white h-12 rounded-xl text-base font-semibold transition-all shadow-lg"
+                disabled={isLoading || isSuccess}
+              >
+                {isSuccess ? (
+                  <div className="flex items-center gap-2">
+                    <Check className="w-5 h-5" />
+                    Twin Created!
+                  </div>
+                ) : isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Creating your Twin...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    Create My Twin
+                    <ArrowRight className="w-5 h-5" />
+                  </div>
+                )}
+              </Button>
             </motion.div>
           </motion.form>
 
@@ -659,28 +480,15 @@ export default function SignupPage() {
             </h3>
             <div className="grid grid-cols-3 gap-4">
               {[
-                {
-                  icon: Sparkles,
-                  title: "AI-First",
-                  description: "Powered by advanced AI",
-                },
-                {
-                  icon: Shield,
-                  title: "Privacy",
-                  description: "Your data is secure",
-                },
-                {
-                  icon: Network,
-                  title: "Meaningful",
-                  description: "Real connections",
-                },
+                { icon: Sparkles, title: "AI-First", description: "Powered by advanced AI" },
+                { icon: Shield, title: "Privacy", description: "Your data is secure" },
+                { icon: Network, title: "Meaningful", description: "Real connections" },
               ].map((item, index) => (
                 <motion.div
                   key={index}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 1.1 + index * 0.1 }}
-                  whileHover={{ y: -4 }}
                   className="text-center p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
                 >
                   <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#156d95]/20 to-[#8b5cf6]/20 flex items-center justify-center mx-auto mb-3">
@@ -699,196 +507,20 @@ export default function SignupPage() {
         </div>
       </div>
 
-      {/* Right Side - Animated AI Journey */}
-      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-[#156d95]/5 via-[#8b5cf6]/5 to-[#0ea5e9]/5 items-center justify-center p-12 relative overflow-hidden">
-        {/* Animated Background */}
-        <AnimatedBackground />
-
-        {/* Content */}
+      {/* Right Side - Visual */}
+      <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-[#156d95]/10 via-[#8b5cf6]/10 to-[#0ea5e9]/10 items-center justify-center p-12 relative overflow-hidden">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="max-w-lg relative z-10"
+          transition={{ duration: 0.8 }}
+          className="max-w-lg text-center"
         >
-          <div className="space-y-10">
-            {/* Header */}
-            <div className="text-center">
-              <motion.h2
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="text-4xl font-bold text-foreground mb-4 tracking-tight"
-                style={{ fontFamily: "Figtree", letterSpacing: "-0.02em" }}
-              >
-                Your AI Journey
-              </motion.h2>
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.4 }}
-                className="text-lg text-muted-foreground"
-                style={{ fontFamily: "Figtree" }}
-              >
-                How TwinLink works in seconds
-              </motion.p>
-            </div>
-
-            {/* Animated Journey */}
-            <div className="space-y-0 relative">
-              {/* Animated Connecting Line */}
-              <motion.div
-                className="absolute left-8 top-16 bottom-16 w-0.5 bg-gradient-to-b from-[#156d95] via-[#8b5cf6] to-[#0ea5e9]"
-                initial={{ scaleY: 0 }}
-                animate={{ scaleY: 1 }}
-                transition={{ duration: 1.5, delay: 0.5, ease: "easeOut" }}
-                style={{ transformOrigin: "top" }}
-              />
-
-              {/* Journey Steps */}
-              {[
-                {
-                  emoji: "👤",
-                  title: "You",
-                  subtitle: "Sign up in seconds",
-                  color: "from-[#156d95] to-[#0e5a7a]",
-                  delay: 0.6,
-                },
-                {
-                  emoji: "🤖",
-                  title: "AI Twin Created",
-                  subtitle: "Your digital persona",
-                  color: "from-[#8b5cf6] to-[#6d28d9]",
-                  delay: 0.8,
-                },
-                {
-                  emoji: "🌐",
-                  title: "TwinLink Network",
-                  subtitle: "Join millions of Twins",
-                  color: "from-[#0ea5e9] to-[#0284c7]",
-                  delay: 1,
-                },
-                {
-                  emoji: "💬",
-                  title: "Twin Conversations",
-                  subtitle: "AI evaluates compatibility",
-                  color: "from-[#10b981] to-[#059669]",
-                  delay: 1.2,
-                },
-                {
-                  emoji: "📊",
-                  title: "Compatibility Analysis",
-                  subtitle: "Deep insights & scores",
-                  color: "from-[#f59e0b] to-[#d97706]",
-                  delay: 1.4,
-                },
-                {
-                  emoji: "❤️",
-                  title: "Meaningful Connection",
-                  subtitle: "Meet your match",
-                  color: "from-[#ec4899] to-[#db2777]",
-                  delay: 1.6,
-                },
-              ].map((step, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.6, delay: step.delay, type: "spring", stiffness: 100 }}
-                  className="flex items-center gap-6 relative mb-8"
-                >
-                  {/* Icon Container with Glow */}
-                  <motion.div
-                    className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${step.color} flex items-center justify-center flex-shrink-0 relative z-10 shadow-lg`}
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    transition={{ type: "spring", stiffness: 400 }}
-                  >
-                    {/* Glow Effect */}
-                    <motion.div
-                      className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${step.color} blur-xl opacity-50`}
-                      animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.3, 0.5, 0.3],
-                      }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        delay: step.delay,
-                      }}
-                    />
-                    <span className="text-3xl relative z-10">{step.emoji}</span>
-                  </motion.div>
-
-                  {/* Content */}
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.4, delay: step.delay + 0.2 }}
-                    className="flex-1"
-                  >
-                    <h3
-                      className="text-lg font-semibold text-foreground mb-1"
-                      style={{ fontFamily: "Figtree" }}
-                    >
-                      {step.title}
-                    </h3>
-                    <p
-                      className="text-sm text-muted-foreground"
-                      style={{ fontFamily: "Figtree" }}
-                    >
-                      {step.subtitle}
-                    </p>
-                  </motion.div>
-
-                  {/* Arrow */}
-                  {index < 5 && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 0.4, y: 0 }}
-                      transition={{ duration: 0.4, delay: step.delay + 0.3 }}
-                      className="absolute left-8 -bottom-4 transform -translate-x-1/2"
-                    >
-                      <ArrowRight className="w-4 h-4 rotate-90 text-[#156d95]" />
-                    </motion.div>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Bottom CTA */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 2 }}
-              className="text-center pt-8 border-t border-border/50"
-            >
-              <p className="text-sm text-muted-foreground mb-4" style={{ fontFamily: "Figtree" }}>
-                Join thousands finding meaningful connections
-              </p>
-              <div className="flex items-center justify-center gap-2">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.3, delay: 2.2 + i * 0.1 }}
-                    className="w-8 h-8 rounded-full bg-gradient-to-br from-[#156d95] to-[#8b5cf6] flex items-center justify-center text-xs text-white font-semibold shadow-lg"
-                  >
-                    {String.fromCharCode(65 + i)}
-                  </motion.div>
-                ))}
-                <motion.span
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 2.7 }}
-                  className="text-sm font-medium text-muted-foreground ml-2"
-                  style={{ fontFamily: "Figtree" }}
-                >
-                  +1,430,992
-                </motion.span>
-              </div>
-            </motion.div>
-          </div>
+          <h2 className="text-3xl font-semibold text-foreground mb-4" style={{ fontFamily: "Figtree" }}>
+            Welcome to TwinLink
+          </h2>
+          <p className="text-lg text-muted-foreground" style={{ fontFamily: "Figtree" }}>
+            Start your journey in the world's first AI Digital Twin Network. Your twin awaits.
+          </p>
         </motion.div>
       </div>
     </div>

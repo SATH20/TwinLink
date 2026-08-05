@@ -7,9 +7,9 @@ import { Bot, Network, Shield, ArrowRight, Mail, Lock } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useSignIn } from "@clerk/nextjs"
+import { useClerk } from "@clerk/nextjs"
+import { useSignIn } from "@clerk/nextjs/legacy"
 import { useRouter } from "next/navigation"
-import type { OAuthStrategy } from "@clerk/types"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -20,11 +20,15 @@ export default function LoginPage() {
   const [socialLoading, setSocialLoading] = useState<string | null>(null)
 
   const { signIn, isLoaded } = useSignIn()
+  const { setActive } = useClerk()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isLoaded || !signIn) return
+    if (!isLoaded || !signIn) {
+      setError("Authentication is still loading. Please refresh the page if this message stays visible.")
+      return
+    }
 
     setIsLoading(true)
     setError("")
@@ -36,8 +40,7 @@ export default function LoginPage() {
       })
 
       if (result.status === "complete") {
-        await signIn.setActive({ session: result.createdSessionId })
-        // Clerk will redirect via middleware based on onboarding status
+        await setActive({ session: result.createdSessionId })
         router.push("/dashboard")
       } else {
         setError("Unable to complete sign in. Please try again.")
@@ -50,9 +53,9 @@ export default function LoginPage() {
     }
   }
 
-  const handleSocialLogin = async (provider: OAuthStrategy) => {
+  const handleSocialLogin = async (provider: "oauth_google" | "oauth_github") => {
     if (!isLoaded || !signIn) {
-      setError("Authentication system is loading. Please wait a moment.")
+      setError("Authentication is still loading. Please refresh the page if this message stays visible.")
       return
     }
 
@@ -249,7 +252,7 @@ export default function LoginPage() {
               variant="outline"
               className="w-full h-11 rounded-lg border-2 hover:bg-gray-50 dark:hover:bg-gray-900 font-medium text-foreground"
               onClick={() => handleSocialLogin("oauth_google")}
-              disabled={!isLoaded || socialLoading !== null}
+              disabled={socialLoading !== null}
             >
               {socialLoading === "oauth_google" ? (
                 <div className="flex items-center gap-2 text-foreground">
@@ -286,7 +289,7 @@ export default function LoginPage() {
               variant="outline"
               className="w-full h-11 rounded-lg border-2 hover:bg-gray-50 dark:hover:bg-gray-900 font-medium text-foreground"
               onClick={() => handleSocialLogin("oauth_github")}
-              disabled={!isLoaded || socialLoading !== null}
+              disabled={socialLoading !== null}
             >
               {socialLoading === "oauth_github" ? (
                 <div className="flex items-center gap-2 text-foreground">
@@ -329,7 +332,6 @@ export default function LoginPage() {
           transition={{ duration: 0.8, delay: 0.2 }}
           className="max-w-lg"
         >
-          {/* Visual Timeline */}
           <div className="space-y-8">
             <div>
               <h2 className="text-3xl font-semibold text-foreground mb-4" style={{ fontFamily: "Figtree" }}>
@@ -340,7 +342,6 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Feature Cards */}
             <div className="space-y-4">
               <div className="bg-card border border-border rounded-xl p-6 hover:border-[#156d95]/50 transition-all">
                 <div className="flex items-start gap-4">

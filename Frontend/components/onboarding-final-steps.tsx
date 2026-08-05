@@ -1,5 +1,5 @@
 import { motion } from "framer-motion"
-import { Edit2, Check, Sparkles, Bot, Zap, Brain, Network, Shield } from "lucide-react"
+import { Edit2, Check, Sparkles, Bot, Zap, Brain, Network, Shield, XCircle, RefreshCw } from "lucide-react"
 import { StepContainer } from "./onboarding-steps"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
@@ -118,8 +118,19 @@ export function ReviewStep({ data, onNext, onBack, onEdit, step, totalSteps }: a
 }
 
 // Generating Twin Step - The Most Important Screen
-export function GeneratingTwinStep() {
+export function GeneratingTwinStep({ 
+  error,
+  onRetry,
+  onComplete,
+  isApiComplete = false,
+}: { 
+  error?: string | null
+  onRetry?: () => void
+  onComplete?: () => void
+  isApiComplete?: boolean
+}) {
   const [currentStep, setCurrentStep] = useState(0)
+  const [animationDone, setAnimationDone] = useState(false)
 
   const steps = [
     { text: "Initializing AI...", icon: Bot, progress: 0 },
@@ -133,18 +144,54 @@ export function GeneratingTwinStep() {
   ]
 
   useEffect(() => {
+    if (error) return // Don't advance animation if there's an error
+
     const interval = setInterval(() => {
       setCurrentStep((prev) => {
+        // If API is not complete yet, pause at step 6 ("Almost Ready...")
+        if (prev >= 6 && !isApiComplete) {
+          return prev
+        }
         if (prev < steps.length - 1) {
           return prev + 1
         }
         clearInterval(interval)
+        setAnimationDone(true)
         return prev
       })
     }, 750) // Each step takes 750ms
 
     return () => clearInterval(interval)
-  }, [])
+  }, [isApiComplete, error])
+
+  // When both animation is done and API is complete, call onComplete
+  useEffect(() => {
+    if (animationDone && isApiComplete && onComplete) {
+      // Small delay so user sees the "Ready!" state
+      const timeout = setTimeout(() => {
+        onComplete()
+      }, 1000)
+      return () => clearTimeout(timeout)
+    }
+  }, [animationDone, isApiComplete, onComplete])
+
+  // If API finishes while we're paused, advance to the end
+  useEffect(() => {
+    if (isApiComplete && currentStep >= 6 && currentStep < steps.length - 1) {
+      // Rapidly advance through remaining steps
+      const interval = setInterval(() => {
+        setCurrentStep((prev) => {
+          if (prev < steps.length - 1) {
+            return prev + 1
+          }
+          clearInterval(interval)
+          setAnimationDone(true)
+          return prev
+        })
+      }, 400)
+      return () => clearInterval(interval)
+    }
+  }, [isApiComplete, currentStep])
 
   const CurrentIcon = steps[currentStep].icon
 
@@ -219,70 +266,105 @@ export function GeneratingTwinStep() {
           </div>
         </div>
 
+        {/* Error State */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 p-5 rounded-2xl bg-red-500/10 border border-red-500/20"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                <XCircle className="w-5 h-5 text-red-500" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-semibold text-foreground mb-1">Something went wrong</h4>
+                <p className="text-sm text-muted-foreground mb-3">{error}</p>
+                {onRetry && (
+                  <Button
+                    onClick={onRetry}
+                    className="bg-gradient-to-r from-[#156d95] to-[#8b5cf6] hover:from-[#0e5a7a] hover:to-[#6d28d9] text-white"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Try Again
+                  </Button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Visual AI Training Sequence */}
-        <div className="space-y-2 font-mono text-sm">
-          {steps.slice(0, currentStep + 1).map((step, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="flex items-center gap-2 text-[#156d95]"
-            >
-              <Check className="w-4 h-4 flex-shrink-0" />
-              <span className="text-xs md:text-sm">{step.text}</span>
-            </motion.div>
-          ))}
-        </div>
+        {!error && (
+          <div className="space-y-2 font-mono text-sm">
+            {steps.slice(0, currentStep + 1).map((step, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="flex items-center gap-2 text-[#156d95]"
+              >
+                <Check className="w-4 h-4 flex-shrink-0" />
+                <span className="text-xs md:text-sm">{step.text}</span>
+              </motion.div>
+            ))}
+          </div>
+        )}
 
         {/* Terminal-like Effect */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="mt-8 p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-border"
-        >
-          <div className="space-y-1 font-mono text-xs text-muted-foreground">
-            <motion.div
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              <span className="text-[#156d95]">█</span> Processing neural patterns...
-            </motion.div>
-            <motion.div
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
-            >
-              <span className="text-[#8b5cf6]">█</span> Syncing with network nodes...
-            </motion.div>
-            <motion.div
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Infinity, delay: 1 }}
-            >
-              <span className="text-[#0ea5e9]">█</span> Calibrating personality matrix...
-            </motion.div>
-          </div>
-        </motion.div>
+        {!error && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1 }}
+            className="mt-8 p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-border"
+          >
+            <div className="space-y-1 font-mono text-xs text-muted-foreground">
+              <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                <span className="text-[#156d95]">█</span> Processing neural patterns...
+              </motion.div>
+              <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
+              >
+                <span className="text-[#8b5cf6]">█</span> Syncing with network nodes...
+              </motion.div>
+              <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 1 }}
+              >
+                <span className="text-[#0ea5e9]">█</span> Calibrating personality matrix...
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Particle Animation */}
-        <div className="mt-8 flex justify-center gap-2">
-          {[...Array(5)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="w-2 h-2 rounded-full bg-gradient-to-r from-[#156d95] to-[#8b5cf6]"
-              animate={{
-                scale: [1, 1.5, 1],
-                opacity: [0.3, 1, 0.3],
-              }}
-              transition={{
-                duration: 1,
-                repeat: Infinity,
-                delay: i * 0.2,
-              }}
-            />
-          ))}
-        </div>
+        {!error && (
+          <div className="mt-8 flex justify-center gap-2">
+            {[...Array(5)].map((_, i) => (
+              <motion.div
+                key={i}
+                className="w-2 h-2 rounded-full bg-gradient-to-r from-[#156d95] to-[#8b5cf6]"
+                animate={{
+                  scale: [1, 1.5, 1],
+                  opacity: [0.3, 1, 0.3],
+                }}
+                transition={{
+                  duration: 1,
+                  repeat: Infinity,
+                  delay: i * 0.2,
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   )
 }
+

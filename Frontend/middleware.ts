@@ -8,6 +8,10 @@ const isPublicRoute = createRouteMatcher([
   "/signup(.*)",
   "/sso-callback(.*)",
   "/api/webhooks(.*)",
+  "/forgot-password(.*)",
+  "/reset-password(.*)",
+  "/terms(.*)",
+  "/privacy(.*)",
 ])
 
 // Define onboarding route
@@ -15,7 +19,7 @@ const isOnboardingRoute = createRouteMatcher(["/onboarding(.*)"])
 
 export default clerkMiddleware(async (auth, req) => {
   const { userId, sessionClaims } = await auth()
-  
+
   // Allow public routes
   if (isPublicRoute(req)) {
     return NextResponse.next()

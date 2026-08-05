@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
-import { useUser } from "@clerk/nextjs"
+import { useUser, useAuth } from "@clerk/nextjs"
 import { Bot, ArrowRight, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { BasicInfoStep } from "@/components/onboarding-steps"
@@ -17,6 +17,8 @@ import {
   DealBreakersStep
 } from "@/components/onboarding-steps-2"
 import { ReviewStep, GeneratingTwinStep } from "@/components/onboarding-final-steps"
+import { registerUser, updateProfile, createTwin, ApiError, getFriendlyErrorMessage } from "@/lib/api-client"
+import { transformOnboardingData, validateOnboardingData } from "@/lib/onboarding-transformer"
 
 // Types
 interface OnboardingData {
@@ -40,6 +42,9 @@ const TOTAL_STEPS = 11
 export default function OnboardingPage() {
   const [step, setStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [isApiComplete, setIsApiComplete] = useState(false)
+  const isSubmitting = useRef(false) // Prevent duplicate submissions
   const [formData, setFormData] = useState<OnboardingData>({
     name: "",
     age: "",
@@ -57,6 +62,7 @@ export default function OnboardingPage() {
   })
 
   const { user } = useUser()
+  const { getToken } = useAuth()
   const router = useRouter()
 
   const handleNext = () => {
@@ -73,10 +79,78 @@ export default function OnboardingPage() {
     }
   }
 
+  /**
+   * Handles the complete onboarding flow:
+   * 1. Validate all fields
+   * 2. Show the generating animation (step 10)
+   * 3. Register/sync user with backend
+   * 4. Transform & send profile data
+   * 5. Create Digital Twin
+   * 6. Mark onboarding complete in Clerk
+   * 7. Redirect to Dashboard
+   */
   const handleComplete = async () => {
+    // Prevent duplicate submissions
+    if (isSubmitting.current) return
+    isSubmitting.current = true
+
+    // Validate before submission
+    const validation = validateOnboardingData(formData)
+    if (!validation.isValid) {
+      setApiError(validation.errors.join(". "))
+      isSubmitting.current = false
+      return
+    }
+
+    // Reset state and show generating animation
+    setApiError(null)
+    setIsApiComplete(false)
     setIsLoading(true)
+    setStep(10) // Show GeneratingTwinStep
 
     try {
+      // Step 1: Get Clerk authentication token
+      const token = await getToken()
+      if (!token) {
+        throw new ApiError(401, "Authentication error. Please sign in again.", "AUTH_ERROR")
+      }
+
+      // Step 2: Register/sync user with backend
+      // This creates the user in Firestore if they don't exist
+      try {
+        await registerUser(token)
+      } catch (error) {
+        // If registration fails with a non-critical error, log and continue
+        // The profile update will create the user record anyway
+        if (error instanceof ApiError && error.status !== 0) {
+          console.warn("User registration warning:", error.message)
+        } else {
+          throw error
+        }
+      }
+
+      // Step 3: Transform frontend data to backend DTO format
+      const profilePayload = transformOnboardingData(formData)
+
+      // Step 4: Send profile data to backend
+      const profileResponse = await updateProfile(token, profilePayload)
+      console.log("Profile updated, completeness:", profileResponse.completenessScore)
+
+      // Step 5: Create Digital Twin
+      // Backend will: check completeness >= 60%, call FastAPI, store twin in Firestore
+      try {
+        const twinResponse = await createTwin(token)
+        console.log("Twin created:", twinResponse.id, "Status:", twinResponse.status)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          // Twin already exists — this is fine, continue
+          console.log("Twin already exists, continuing...")
+        } else {
+          throw error
+        }
+      }
+
+      // Step 6: Mark onboarding as complete in Clerk metadata
       await user?.update({
         unsafeMetadata: {
           ...user.unsafeMetadata,
@@ -85,14 +159,38 @@ export default function OnboardingPage() {
         },
       })
 
-      setTimeout(() => {
-        router.push("/dashboard")
-      }, 6000)
+      // Step 7: Signal animation that API is done
+      setIsApiComplete(true)
+      // The GeneratingTwinStep component will call handleAnimationComplete
+      // when both the animation and API are finished
+
     } catch (error) {
-      console.error("Onboarding completion error:", error)
-      setIsLoading(false)
+      console.error("Onboarding error:", error)
+      const message = getFriendlyErrorMessage(error)
+      setApiError(message || "Something went wrong. Please try again.")
+      isSubmitting.current = false
     }
   }
+
+  /**
+   * Called by GeneratingTwinStep when both the animation
+   * and API call are complete. Redirects to Dashboard.
+   */
+  const handleAnimationComplete = useCallback(() => {
+    router.push("/dashboard")
+  }, [router])
+
+  /**
+   * Retry handler for when twin generation fails.
+   * Resets error state and re-triggers the full flow.
+   */
+  const handleRetry = useCallback(() => {
+    setApiError(null)
+    setIsApiComplete(false)
+    isSubmitting.current = false
+    // Re-trigger the complete flow
+    handleComplete()
+  }, [formData, user])
 
   const updateFormData = (field: keyof OnboardingData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -220,7 +318,15 @@ export default function OnboardingPage() {
           />
         )}
 
-        {step === 10 && <GeneratingTwinStep key="generating" />}
+        {step === 10 && (
+          <GeneratingTwinStep
+            key="generating"
+            error={apiError}
+            onRetry={handleRetry}
+            onComplete={handleAnimationComplete}
+            isApiComplete={isApiComplete}
+          />
+        )}
       </AnimatePresence>
     </div>
   )
