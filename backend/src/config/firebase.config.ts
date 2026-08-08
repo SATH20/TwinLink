@@ -1,10 +1,8 @@
-import * as admin from 'firebase-admin';
-import * as path from 'path';
+import { registerAs } from '@nestjs/config';
 
-const serviceAccount = require(path.join(__dirname, '../../private.json'));
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
-export const db = admin.firestore();
+export default registerAs('firebase', () => ({
+  serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './private.json',
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+}));
