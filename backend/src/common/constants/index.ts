@@ -1,0 +1,36 @@
+export const APP_NAME = 'TwinLink';
+export const API_VERSION = 'v1';
+export const DEFAULT_PAGE_SIZE = 20;
+export const MAX_PAGE_SIZE = 100;
+
+export const FIREBASE_COLLECTIONS = {
+  USERS: 'users',
+  PROFILES: 'profiles',
+  TWINS: 'twins',
+  MATCHES: 'matches',
+  CONVERSATIONS: 'conversations',
+  NOTIFICATIONS: 'notifications',
+} as const;
+
+export enum TWIN_STATUS {
+  CREATED = 'CREATED',
+  ACTIVE = 'ACTIVE',
+  SEARCHING = 'SEARCHING',
+  TALKING = 'TALKING',
+  EVALUATING = 'EVALUATING',
+  MATCH_FOUND = 'MATCH_FOUND',
+  SLEEPING = 'SLEEPING',
+}
+
+export enum MATCH_STATUS {
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  REJECTED = 'REJECTED',
+}
+
+export enum NOTIFICATION_TYPE {
+  MATCH_FOUND = 'MATCH_FOUND',
+  CONVERSATION_COMPLETE = 'CONVERSATION_COMPLETE',
+  TWIN_UPDATED = 'TWIN_UPDATED',
+}
