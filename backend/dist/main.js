@@ -28,10 +28,6 @@ async function bootstrap() {
     });
     app.useGlobalPipes((0, validation_pipe_1.createValidationPipe)());
     app.useGlobalFilters(new all_exceptions_filter_1.AllExceptionsFilter(), new http_exception_filter_1.HttpExceptionFilter());
-    app.enableVersioning({
-        type: common_1.VersioningType.URI,
-        defaultVersion: '1',
-    });
     const swaggerConfig = new swagger_1.DocumentBuilder()
         .setTitle('TwinLink API')
         .setDescription('TwinLink AI Digital Twin Network — Backend API\n\n' +

@@ -1,12 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { Bot, Mail, Lock, ArrowRight, Check, Shield, Sparkles, Network, User } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useUser } from "@clerk/nextjs"
+// NOTE: In Clerk v7 the default useSignIn/useSignUp from "@clerk/nextjs" are the new
+// signal-based hooks ({ signUp, errors, fetchStatus }) that do NOT expose `isLoaded`.
+// Our custom flow relies on `isLoaded`, so we must use the legacy hook.
 import { useSignUp } from "@clerk/nextjs/legacy"
 import { useRouter } from "next/navigation"
 
@@ -21,9 +25,53 @@ export default function SignupPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const [socialLoading, setSocialLoading] = useState<string | null>(null)
+  const [isRedirecting, setIsRedirecting] = useState(false)
 
   const { signUp, isLoaded } = useSignUp()
+  const { user, isLoaded: userLoaded } = useUser()
   const router = useRouter()
+
+  // Redirect if user already has active session
+  useEffect(() => {
+    if (!userLoaded) return
+
+    if (user) {
+      setIsRedirecting(true)
+      const metadata = user.unsafeMetadata as { onboardingComplete?: boolean } | undefined
+      const hasCompletedOnboarding = metadata?.onboardingComplete ?? false
+
+      if (hasCompletedOnboarding) {
+        router.replace("/dashboard")
+      } else {
+        router.replace("/onboarding")
+      }
+    }
+  }, [user, userLoaded, router])
+
+  // Show loading state while redirecting
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+            className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#156d95] to-[#0e5a7a] flex items-center justify-center mx-auto mb-6"
+          >
+            <Bot className="w-8 h-8 text-white" />
+          </motion.div>
+          <h1 className="text-2xl font-bold text-foreground mb-2" style={{ fontFamily: "Figtree" }}>
+            Redirecting...
+          </h1>
+        </motion.div>
+      </div>
+    )
+  }
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -40,12 +88,7 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validateForm()) return
-
-    if (!isLoaded || !signUp) {
-      setErrors({ submit: "Authentication is still loading. Please refresh the page if this message stays visible." })
-      return
-    }
+    if (!validateForm() || !isLoaded) return
 
     setIsLoading(true)
 
@@ -74,10 +117,7 @@ export default function SignupPage() {
   }
 
   const handleSocialSignup = async (provider: "oauth_google" | "oauth_github") => {
-    if (!isLoaded || !signUp) {
-      setErrors({ submit: "Authentication is still loading. Please refresh the page if this message stays visible." })
-      return
-    }
+    if (!isLoaded) return
 
     setSocialLoading(provider)
     setErrors({})
@@ -199,7 +239,7 @@ export default function SignupPage() {
                 variant="outline"
                 className="w-full h-12 rounded-xl text-base font-medium hover:shadow-md transition-all border-2 hover:bg-gray-50 dark:hover:bg-gray-900 text-foreground"
                 onClick={() => handleSocialSignup("oauth_google")}
-                disabled={socialLoading !== null}
+                disabled={!isLoaded || socialLoading !== null}
               >
                 {socialLoading === "oauth_google" ? (
                   <div className="flex items-center gap-2 text-foreground">
@@ -238,7 +278,7 @@ export default function SignupPage() {
                 variant="outline"
                 className="w-full h-12 rounded-xl text-base font-medium hover:shadow-md transition-all border-2 hover:bg-gray-50 dark:hover:bg-gray-900 text-foreground"
                 onClick={() => handleSocialSignup("oauth_github")}
-                disabled={socialLoading !== null}
+                disabled={!isLoaded || socialLoading !== null}
               >
                 {socialLoading === "oauth_github" ? (
                   <div className="flex items-center gap-2 text-foreground">

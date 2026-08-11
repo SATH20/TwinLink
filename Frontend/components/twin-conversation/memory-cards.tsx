@@ -2,20 +2,50 @@
 
 import React from "react"
 import { motion } from "framer-motion"
-import { Database, Shield, Cpu, Target, Compass, Heart, TrendingUp, Zap, MessageCircle } from "lucide-react"
+import { Database, Shield, Cpu, Heart, MessageCircle } from "lucide-react"
 
-const memories = [
-  { id: 1, tag: "Value", content: "Prefers honesty", color: "#156d95", icon: Shield },
-  { id: 2, tag: "Interest", content: "Interested in AI", color: "#0ea5e9", icon: Cpu },
-  { id: 3, tag: "Mindset", content: "Long-term mindset", color: "#8b5cf6", icon: Target },
-  { id: 4, tag: "Interest", content: "Enjoys travel", color: "#f59e0b", icon: Compass },
-  { id: 5, tag: "Value", content: "Values commitment", color: "#10b981", icon: Heart },
-  { id: 6, tag: "Trait", content: "Growth-oriented", color: "#ec4899", icon: TrendingUp },
-  { id: 7, tag: "Interest", content: "Technology enthusiast", color: "#6366f1", icon: Zap },
-  { id: 8, tag: "Value", content: "Authentic communication", color: "#14b8a6", icon: MessageCircle },
-]
+interface MemoryCard {
+  id: number
+  tag: string
+  content: string
+  color: string
+  icon: typeof Shield
+}
 
-export function MemoryCards() {
+export function MemoryCards({
+  myInterests = [],
+  myValues = [],
+}: {
+  myInterests?: string[]
+  myValues?: string[]
+}) {
+  // Build the memory cards from the user's real profile data. Values and
+  // interests are the data points the twin references during analysis.
+  const valueCards: MemoryCard[] = myValues.slice(0, 4).map((value, idx) => ({
+    id: idx + 1,
+    tag: "Value",
+    content: value,
+    color: "#156d95",
+    icon: Shield,
+  }))
+
+  const interestCards: MemoryCard[] = myInterests.slice(0, 4).map((interest, idx) => ({
+    id: valueCards.length + idx + 1,
+    tag: "Interest",
+    content: interest,
+    color: "#0ea5e9",
+    icon: Cpu,
+  }))
+
+  const memories = [...valueCards, ...interestCards]
+
+  if (memories.length === 0) {
+    return null
+  }
+
+  const valueCount = valueCards.length
+  const interestCount = interestCards.length
+
   return (
     <div className="rounded-2xl bg-card/50 backdrop-blur-xl border border-border/50 p-8 shadow-lg">
       <div className="flex items-center gap-3 mb-2">
@@ -45,9 +75,7 @@ export function MemoryCards() {
                 transformPerspective: 800,
               }}
             >
-              <div
-                className="absolute inset-0 z-0 pointer-events-none"
-              >
+              <div className="absolute inset-0 z-0 pointer-events-none">
                 <motion.div
                   className="w-full h-full"
                   animate={{ backgroundPosition: ["200% 0", "-200% 0"] }}
@@ -86,16 +114,12 @@ export function MemoryCards() {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-[#156d95]"></div>
-            <span className="text-muted-foreground">Values (3)</span>
+            <Heart className="w-3.5 h-3.5 text-[#156d95]" />
+            <span className="text-muted-foreground">Values ({valueCount})</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-[#0ea5e9]"></div>
-            <span className="text-muted-foreground">Interests (3)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-[#ec4899]"></div>
-            <span className="text-muted-foreground">Other (2)</span>
+            <MessageCircle className="w-3.5 h-3.5 text-[#0ea5e9]" />
+            <span className="text-muted-foreground">Interests ({interestCount})</span>
           </div>
         </div>
       </div>

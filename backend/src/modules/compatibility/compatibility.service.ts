@@ -1,4 +1,4 @@
-import { Injectable, Inject, forwardRef, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, forwardRef, NotFoundException, Logger } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
 import { ConversationService } from '../conversation/conversation.service';
 import { ProfilesService } from '../profiles/profiles.service';
@@ -12,6 +12,8 @@ import { CompatibilityRequestDto } from '../ai/dto/compatibility-request.dto';
  */
 @Injectable()
 export class CompatibilityService {
+  private readonly logger = new Logger(CompatibilityService.name);
+
   constructor(
     private readonly aiService: AiService,
     @Inject(forwardRef(() => ConversationService))
@@ -50,30 +52,113 @@ export class CompatibilityService {
       // 4. Call AiService.analyzeCompatibility()
       const result = await this.aiService.analyzeCompatibility(requestDto);
 
-      // 5 & 6. Handle the result
-      if (result.compatibilityScore >= 70) {
-        // High compatibility: create match and set twins to MATCH_FOUND
-        await this.matchingService.createMatch(
-          conversation.userA,
-          conversation.userB,
-          result.compatibilityScore,
-          result.summary,
-        );
+      // [TEMP LOG 1] Full /compatibility response keys — confirms the exact
+      // field names the FastAPI engine returned so we can map them 1:1.
+      this.logger.debug(
+        `[TEMP][compat] /compatibility response keys for ${conversation.id}: ` +
+          `${JSON.stringify(Object.keys(result ?? {}))} | ` +
+          `compatibilityScore=${result?.compatibilityScore} ` +
+          `confidenceScore=${result?.confidenceScore} ` +
+          `recommendation=${result?.recommendation}`,
+      );
 
-        await this.twinsService.updateStatus(conversation.twinA, 'MATCH_FOUND');
-        await this.twinsService.updateStatus(conversation.twinB, 'MATCH_FOUND');
-      } else {
-        // Low compatibility: set twins back to ACTIVE
-        await this.twinsService.updateStatus(conversation.twinA, 'ACTIVE');
-        await this.twinsService.updateStatus(conversation.twinB, 'ACTIVE');
+      // 5. Persist the full analysis back onto the conversation FIRST so the
+      //    frontend has a single source of truth (score, confidence,
+      //    strengths, weaknesses, recommendation, detailed breakdown).
+      //    This is written BEFORE any match/twin side-effects so a failure in
+      //    those steps can never prevent `analysisComplete` from being saved
+      //    (which is what left the UI stuck on "Analyzing compatibility...").
+      const analysisUpdate = {
+        compatibilityScore: result.compatibilityScore,
+        confidenceScore: result.confidenceScore,
+        strengths: Array.isArray(result.strengths) ? result.strengths : [],
+        weaknesses: Array.isArray(result.weaknesses) ? result.weaknesses : [],
+        recommendation: result.recommendation ?? '',
+        detailedAnalysis: result.detailedAnalysis ?? null,
+        analysisComplete: true,
+        status: 'COMPLETED' as const,
+      };
+
+      // [TEMP LOG 2] Conversation update payload being persisted.
+      this.logger.debug(
+        `[TEMP][compat] update payload for ${conversation.id}: ${JSON.stringify(analysisUpdate)}`,
+      );
+
+      const savedConversation = await this.conversationService.updateConversation(
+        conversation.id,
+        analysisUpdate,
+      );
+
+      // [TEMP LOG 3] Saved conversation status (read back from the store).
+      this.logger.debug(
+        `[TEMP][compat] saved conversation ${conversation.id}: ` +
+          `status=${savedConversation?.status} ` +
+          `analysisComplete=${savedConversation?.analysisComplete} ` +
+          `compatibilityScore=${savedConversation?.compatibilityScore} ` +
+          `confidenceScore=${savedConversation?.confidenceScore}`,
+      );
+
+      // 6 & 7. Handle match creation + twin status as SIDE-EFFECTS. These must
+      //    not undo the analysis we already persisted, so any failure here is
+      //    logged but does not throw (the analysis result is still returned).
+      let matchId: string | null = null;
+      try {
+        if (result.compatibilityScore >= 70) {
+          // High compatibility: create match and set twins to MATCH_FOUND
+          const match = await this.matchingService.createMatch(
+            conversation.userA,
+            conversation.userB,
+            result.compatibilityScore,
+            result.summary,
+            {
+              confidenceScore: result.confidenceScore,
+              strengths: result.strengths,
+              weaknesses: result.weaknesses,
+              recommendation: result.recommendation,
+              conversationId: conversation.id,
+              twinA: conversation.twinA,
+              twinB: conversation.twinB,
+            },
+          );
+          matchId = match.id;
+
+          await this.twinsService.updateStatus(conversation.twinA, 'MATCH_FOUND');
+          await this.twinsService.updateStatus(conversation.twinB, 'MATCH_FOUND');
+
+          // Link the freshly-created match back onto the conversation.
+          await this.conversationService.updateConversation(conversation.id, { matchId });
+        } else {
+          // Low compatibility: set twins back to ACTIVE
+          await this.twinsService.updateStatus(conversation.twinA, 'ACTIVE');
+          await this.twinsService.updateStatus(conversation.twinB, 'ACTIVE');
+        }
+      } catch (sideEffectError) {
+        // Analysis is already saved; a match/twin-status failure should not
+        // roll the conversation back into a "still analyzing" state.
+        this.logger.error(
+          `Compatibility side-effects failed for conversation ${conversation.id} ` +
+            `(analysis was already persisted): ${(sideEffectError as Error).message}`,
+        );
       }
 
-      // 7. Return result
+      // 8. Return result
       return result as CompatibilityResult;
     } catch (error) {
-      // On any failure, do not leave the twins stranded in EVALUATING.
-      // Best-effort revert both twins to ACTIVE so they can be re-matched.
+      // The analysis itself (AI call or persistence) failed. Mark the
+      // conversation FAILED so the frontend can stop the loader instead of
+      // polling forever, and best-effort revert both twins to ACTIVE.
+      this.logger.error(
+        `Compatibility analysis failed for conversation ${conversation.id}: ${(error as Error).message}`,
+      );
+
       await Promise.allSettled([
+        this.conversationService
+          .updateConversation(conversation.id, { status: 'FAILED', analysisComplete: false })
+          .catch((e) =>
+            this.logger.error(
+              `Failed to mark conversation ${conversation.id} as FAILED: ${(e as Error).message}`,
+            ),
+          ),
         this.twinsService.updateStatus(conversation.twinA, 'ACTIVE'),
         this.twinsService.updateStatus(conversation.twinB, 'ACTIVE'),
       ]);

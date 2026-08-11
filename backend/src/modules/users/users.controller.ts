@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -24,10 +24,19 @@ export class UsersController {
   @ApiOperation({ summary: 'Update current user profile' })
   @ApiBody({ type: UpdateUserDto })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 409, description: 'Username already taken' })
   async updateMe(
     @CurrentUser() user: AuthenticatedUser,
     @Body() updateUserDto: UpdateUserDto,
   ) {
     return this.usersService.updateUser(user.userId, updateUserDto);
+  }
+
+  @Delete('me')
+  @ApiOperation({ summary: 'Permanently delete the current user account and all associated data' })
+  @ApiResponse({ status: 200, description: 'Account deleted successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async deleteMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.deleteAccount(user.userId);
   }
 }

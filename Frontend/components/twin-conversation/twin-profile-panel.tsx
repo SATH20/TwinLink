@@ -25,11 +25,15 @@ export function TwinProfilePanel({
   interests,
   values,
 }: TwinProfilePanelProps) {
+  const safePersonality = Array.isArray(personality) ? personality : []
+  const safeInterests = Array.isArray(interests) ? interests : []
+  const safeValues = Array.isArray(values) ? values : []
   const isYourTwin = type === "your"
   const accentColor = isYourTwin ? "#156d95" : "#8b5cf6"
   const accentColorDark = isYourTwin ? "#0e5a7a" : "#6d28d9"
   const gradient = `linear-gradient(135deg, ${accentColor}, ${accentColorDark})`
-  const twinId = isYourTwin ? "TWIN-0x7F3A" : "TWIN-0xA2E1"
+  const statusLabel =
+    status === "COMPLETED" ? "Completed" : status === "IN_PROGRESS" ? "Talking" : status
 
   return (
     <div className="sticky top-32 rounded-2xl bg-card/80 backdrop-blur-xl border border-border p-6 shadow-lg space-y-6">
@@ -81,23 +85,15 @@ export function TwinProfilePanel({
         {/* Name & Title */}
         <div>
           <h3 className="text-lg font-bold text-foreground" style={{ fontFamily: "Figtree" }}>
-            {isYourTwin ? "Your Digital Twin" : "Matched Twin"}
+            {name}&apos;s Twin
           </h3>
-          <p className="text-sm text-muted-foreground">{name}&apos;s AI Representative</p>
+          <p className="text-sm text-muted-foreground">
+            {isYourTwin ? "Your AI Representative" : "AI Representative"}
+          </p>
         </div>
 
-        {/* Twin ID Badge */}
+        {/* Status Badge */}
         <div className="flex items-center justify-center gap-2">
-          <span
-            className="text-[10px] font-mono px-2.5 py-1 rounded-md border"
-            style={{
-              color: accentColor,
-              borderColor: `${accentColor}30`,
-              backgroundColor: `${accentColor}08`,
-            }}
-          >
-            {twinId}
-          </span>
           <Badge
             className="text-xs font-semibold text-white"
             style={{ background: gradient }}
@@ -107,7 +103,7 @@ export function TwinProfilePanel({
               transition={{ duration: 1.5, repeat: Infinity }}
               className="w-1.5 h-1.5 rounded-full bg-white mr-1.5 inline-block"
             />
-            {status}
+            {statusLabel}
           </Badge>
         </div>
       </div>
@@ -130,6 +126,7 @@ export function TwinProfilePanel({
       </div>
 
       {/* Personality */}
+      {safePersonality.length > 0 && (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -141,7 +138,7 @@ export function TwinProfilePanel({
           Personality
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {personality.map((trait, index) => (
+          {safePersonality.map((trait, index) => (
             <motion.div
               key={trait}
               initial={{ opacity: 0, scale: 0.8 }}
@@ -162,8 +159,10 @@ export function TwinProfilePanel({
           ))}
         </div>
       </motion.div>
+      )}
 
       {/* Interests */}
+      {safeInterests.length > 0 && (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -175,7 +174,7 @@ export function TwinProfilePanel({
           Interests
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {interests.map((interest, index) => (
+          {safeInterests.map((interest, index) => (
             <motion.div
               key={interest}
               initial={{ opacity: 0, scale: 0.8 }}
@@ -194,8 +193,10 @@ export function TwinProfilePanel({
           ))}
         </div>
       </motion.div>
+      )}
 
       {/* Values */}
+      {safeValues.length > 0 && (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -207,7 +208,7 @@ export function TwinProfilePanel({
           Values
         </div>
         <div className="space-y-1.5">
-          {values.map((value, index) => (
+          {safeValues.map((value, index) => (
             <motion.div
               key={value}
               initial={{ opacity: 0, x: -10 }}
@@ -224,6 +225,7 @@ export function TwinProfilePanel({
           ))}
         </div>
       </motion.div>
+      )}
     </div>
   )
 }

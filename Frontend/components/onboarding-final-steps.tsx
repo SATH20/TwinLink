@@ -3,7 +3,7 @@ import { Edit2, Check, Sparkles, Bot, Zap, Brain, Network, Shield, XCircle, Refr
 import { StepContainer } from "./onboarding-steps"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 
 // Review Step
 export function ReviewStep({ data, onNext, onBack, onEdit, step, totalSteps }: any) {
@@ -143,26 +143,53 @@ export function GeneratingTwinStep({
     { text: "Your Digital Twin is Ready!", icon: Check, progress: 100 },
   ]
 
-  useEffect(() => {
-    if (error) return // Don't advance animation if there's an error
+  const FINAL_STEP = steps.length - 1
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    const interval = setInterval(() => {
+  // Clear interval helper
+  const clearAnimationInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+  }, [])
+
+  // Main animation: advance steps on a timer
+  useEffect(() => {
+    if (error) {
+      clearAnimationInterval()
+      return
+    }
+
+    // Determine speed: fast (400ms) if API is done and we're catching up, normal (750ms) otherwise
+    const speed = isApiComplete ? 400 : 750
+
+    clearAnimationInterval()
+    intervalRef.current = setInterval(() => {
       setCurrentStep((prev) => {
-        // If API is not complete yet, pause at step 6 ("Almost Ready...")
+        // Pause at step 6 if API hasn't finished yet
         if (prev >= 6 && !isApiComplete) {
           return prev
         }
-        if (prev < steps.length - 1) {
+        // Advance if not at the end
+        if (prev < FINAL_STEP) {
           return prev + 1
         }
-        clearInterval(interval)
-        setAnimationDone(true)
+        // Already at the end, stop advancing
         return prev
       })
-    }, 750) // Each step takes 750ms
+    }, speed)
 
-    return () => clearInterval(interval)
-  }, [isApiComplete, error])
+    return clearAnimationInterval
+  }, [isApiComplete, error, clearAnimationInterval, FINAL_STEP])
+
+  // Detect when animation reaches the final step
+  useEffect(() => {
+    if (currentStep === FINAL_STEP && !animationDone) {
+      clearAnimationInterval()
+      setAnimationDone(true)
+    }
+  }, [currentStep, FINAL_STEP, animationDone, clearAnimationInterval])
 
   // When both animation is done and API is complete, call onComplete
   useEffect(() => {
@@ -175,23 +202,6 @@ export function GeneratingTwinStep({
     }
   }, [animationDone, isApiComplete, onComplete])
 
-  // If API finishes while we're paused, advance to the end
-  useEffect(() => {
-    if (isApiComplete && currentStep >= 6 && currentStep < steps.length - 1) {
-      // Rapidly advance through remaining steps
-      const interval = setInterval(() => {
-        setCurrentStep((prev) => {
-          if (prev < steps.length - 1) {
-            return prev + 1
-          }
-          clearInterval(interval)
-          setAnimationDone(true)
-          return prev
-        })
-      }, 400)
-      return () => clearInterval(interval)
-    }
-  }, [isApiComplete, currentStep])
 
   const CurrentIcon = steps[currentStep].icon
 

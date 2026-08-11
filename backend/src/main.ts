@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger, VersioningType } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -15,7 +15,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
  * - Global exception filters
  * - CORS with configurable origins
  * - Helmet security headers
- * - URI-based API versioning
+ * - Explicit v1 route prefixes on controllers
  * - Swagger documentation
  */
 async function bootstrap(): Promise<void> {
@@ -44,12 +44,6 @@ async function bootstrap(): Promise<void> {
 
   // ── Global Filters ──────────────────────────────────────
   app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
-
-  // ── API Versioning ──────────────────────────────────────
-  app.enableVersioning({
-    type: VersioningType.URI,
-    defaultVersion: '1',
-  });
 
   // ── Swagger Documentation ──────────────────────────────
   const swaggerConfig = new DocumentBuilder()

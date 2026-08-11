@@ -2,10 +2,22 @@
 
 import React from "react"
 import { motion } from "framer-motion"
-import { CheckCircle2, User, Download, Share2 } from "lucide-react"
+import { CheckCircle2, User, Download, Share2, Loader2, Clock, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export function QuickActions() {
+export function QuickActions({
+  canAccept = false,
+  accepting = false,
+  requestPending = false,
+  connected = false,
+  onAccept,
+}: {
+  canAccept?: boolean
+  accepting?: boolean
+  requestPending?: boolean
+  connected?: boolean
+  onAccept?: () => void
+}) {
   return (
     <div className="rounded-2xl bg-card/50 backdrop-blur-xl border border-border/50 p-8 shadow-lg">
       <div className="mb-6">
@@ -18,23 +30,49 @@ export function QuickActions() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         {/* Accept Introduction */}
         <motion.div
-          whileHover={{ y: -4, scale: 1.02 }}
+          whileHover={canAccept && !requestPending && !connected ? { y: -4, scale: 1.02 } : undefined}
           className="h-full"
         >
           <Button
-            className="w-full h-full min-h-[120px] p-6 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#10b981] to-[#059669] hover:from-[#059669] hover:to-[#047857] text-white shadow-lg hover:shadow-xl hover:shadow-green-500/25 border-none transition-all relative overflow-hidden"
+            onClick={onAccept}
+            disabled={!canAccept || accepting || requestPending || connected}
+            className="w-full h-full min-h-[120px] p-6 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#10b981] to-[#059669] hover:from-[#059669] hover:to-[#047857] text-white shadow-lg hover:shadow-xl hover:shadow-green-500/25 border-none transition-all relative overflow-hidden disabled:opacity-50"
           >
-            <motion.div 
-              className="absolute inset-0 bg-white/20"
-              animate={{ opacity: [0, 0.5, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            />
+            {canAccept && !requestPending && !connected && (
+              <motion.div
+                className="absolute inset-0 bg-white/20"
+                animate={{ opacity: [0, 0.5, 0] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+            )}
             <div className="p-3 bg-white/20 rounded-full relative z-10">
-              <CheckCircle2 className="w-8 h-8 text-white" />
+              {accepting ? (
+                <Loader2 className="w-8 h-8 text-white animate-spin" />
+              ) : connected ? (
+                <Check className="w-8 h-8 text-white" />
+              ) : requestPending ? (
+                <Clock className="w-8 h-8 text-white" />
+              ) : (
+                <CheckCircle2 className="w-8 h-8 text-white" />
+              )}
             </div>
             <div className="text-center relative z-10">
-              <div className="font-bold text-lg">Accept Introduction</div>
-              <div className="text-xs text-white/80 font-normal">Connect with this user</div>
+              <div className="font-bold text-lg">
+                {accepting 
+                  ? "Sending..." 
+                  : connected 
+                  ? "Connected" 
+                  : requestPending 
+                  ? "Request Pending" 
+                  : "Accept Introduction"}
+              </div>
+              <div className="text-xs text-white/80 font-normal">
+                {connected 
+                  ? "You're connected!" 
+                  : requestPending 
+                  ? "Waiting for response" 
+                  : "Connect with this user"}
+              </div>
             </div>
           </Button>
         </motion.div>
@@ -81,7 +119,12 @@ export function QuickActions() {
 
       <div className="text-center">
         <p className="text-xs text-muted-foreground">
-          💡 Both users will be notified only after you accept the introduction. Your privacy is protected until then.
+          {connected
+            ? "✅ You're connected! Navigate to the Connections page to start chatting."
+            : requestPending 
+            ? "💌 Your introduction request has been sent. You'll be notified when they respond."
+            : "💡 Both users will be notified only after you accept the introduction. Your privacy is protected until then."
+          }
         </p>
       </div>
     </div>

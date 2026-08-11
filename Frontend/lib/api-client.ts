@@ -69,6 +69,19 @@ async function apiRequest<T>(
       )
     }
 
+    // The backend wraps every successful response with a global
+    // TransformInterceptor: { success: true, data: T, meta: {...} }.
+    // Unwrap `data` so callers receive the actual payload (otherwise every
+    // field reads as undefined and the UI renders an empty conversation).
+    if (
+      body &&
+      typeof body === "object" &&
+      "success" in body &&
+      "data" in body
+    ) {
+      return body.data as T
+    }
+
     return body as T
   } catch (error) {
     // Re-throw ApiError as-is
@@ -102,6 +115,7 @@ async function apiRequest<T>(
 export interface RegisterResponse {
   userId: string
   email: string
+  name: string
   isNewUser: boolean
   message: string
 }
@@ -109,10 +123,12 @@ export interface RegisterResponse {
 /**
  * Register/sync the current Clerk user with the backend.
  * Creates the user in Firestore if they don't exist.
+ * Pass the Clerk display name so the backend stores a real name.
  */
-export async function registerUser(token: string): Promise<RegisterResponse> {
+export async function registerUser(token: string, name?: string): Promise<RegisterResponse> {
   return apiRequest<RegisterResponse>("/v1/auth/register", token, {
     method: "POST",
+    body: JSON.stringify({ name: name ?? "" }),
   })
 }
 
@@ -120,11 +136,26 @@ export async function registerUser(token: string): Promise<RegisterResponse> {
 // Profile Endpoints
 // ============================================================
 
+export interface ProfilePrivacy {
+  profileVisibility: "public" | "connections"
+  includeInMatching: boolean
+}
+
+export interface NotificationPreferences {
+  connectionRequests: boolean
+  connectionAccepted: boolean
+  newMessages: boolean
+  twinUpdates: boolean
+}
+
 export interface ProfileResponse {
   id: string
   userId: string
+  name?: string
+  avatar?: string
   age?: number
   gender?: string
+  bio?: string
   location?: any
   personality?: any
   values?: string[]
@@ -136,9 +167,19 @@ export interface ProfileResponse {
   lifestyle?: any
   languages?: string[]
   profession?: any
+  privacy?: ProfilePrivacy
+  notificationPreferences?: NotificationPreferences
+  limitedVisibility?: boolean
   completenessScore: number
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * Get the current user's own profile (full detail, including settings).
+ */
+export async function getMyProfile(token: string): Promise<ProfileResponse> {
+  return apiRequest<ProfileResponse>("/v1/profiles/me", token, { method: "GET" })
 }
 
 /**
@@ -150,6 +191,62 @@ export async function updateProfile(token: string, data: any): Promise<ProfileRe
     method: "PUT",
     body: JSON.stringify(data),
   })
+}
+
+/**
+ * Update privacy and/or notification-preference settings (independent sections).
+ */
+export async function updateSettings(
+  token: string,
+  data: { privacy?: Partial<ProfilePrivacy>; notificationPreferences?: Partial<NotificationPreferences> }
+): Promise<ProfileResponse> {
+  return apiRequest<ProfileResponse>("/v1/profiles/me/settings", token, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
+}
+
+// ============================================================
+// Current User (account) Endpoints
+// ============================================================
+
+export interface AccountUser {
+  id: string
+  clerkId: string
+  email: string
+  name: string
+  username?: string
+  phone?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Get the current user's application account record.
+ */
+export async function getMyAccount(token: string): Promise<AccountUser> {
+  return apiRequest<AccountUser>("/v1/users/me", token, { method: "GET" })
+}
+
+/**
+ * Update editable account fields (name, username, phone). Email stays owned by Clerk.
+ */
+export async function updateMyAccount(
+  token: string,
+  data: { name?: string; username?: string; phone?: string }
+): Promise<AccountUser> {
+  return apiRequest<AccountUser>("/v1/users/me", token, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Permanently delete the current user's account and all associated data
+ * (profile, twin, connections, messages) plus the Clerk user.
+ */
+export async function deleteMyAccount(token: string): Promise<{ deleted: boolean }> {
+  return apiRequest<{ deleted: boolean }>("/v1/users/me", token, { method: "DELETE" })
 }
 
 // ============================================================
@@ -195,6 +292,312 @@ export async function getTwin(token: string): Promise<TwinResponse> {
   })
 }
 
+/**
+ * Update the current user's Digital Twin (status and/or custom instructions).
+ */
+export async function updateTwin(
+  token: string,
+  data: { status?: string; customPromptAdditions?: string }
+): Promise<TwinResponse> {
+  return apiRequest<TwinResponse>("/v1/twins/me", token, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  })
+}
+
+/**
+ * Get another user's profile by their user ID.
+ * Used to display the selected/matched user's twin details.
+ */
+export async function getUserProfile(
+  token: string,
+  userId: string
+): Promise<ProfileResponse> {
+  return apiRequest<ProfileResponse>(`/v1/profiles/${userId}`, token, {
+    method: "GET",
+  })
+}
+
+// ============================================================
+// Conversation Endpoints
+// ============================================================
+
+export interface ConversationMessage {
+  role: 'twin_a' | 'twin_b'
+  content: string
+  timestamp: string
+}
+
+export interface CompatibilityDetailedAnalysis {
+  emotional: number
+  intellectual: number
+  lifestyle: number
+  values: number
+  communication: number
+}
+
+export interface ConversationResponse {
+  id: string
+  twinA: string
+  twinB: string
+  userA: string
+  userB: string
+  messages: ConversationMessage[]
+  summary: string
+  topicsDiscussed: string[]
+  emotionalTone: string
+  compatibilityScore: number
+  confidenceScore: number
+  strengths: string[]
+  weaknesses: string[]
+  recommendation: 'STRONG_MATCH' | 'GOOD_MATCH' | 'MODERATE_MATCH' | 'WEAK_MATCH' | 'NO_MATCH' | ''
+  detailedAnalysis: CompatibilityDetailedAnalysis | null
+  reasoningIterations: number
+  analysisComplete: boolean
+  matchId: string | null
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Start a conversation between the current user's twin and a target user's twin.
+ */
+export async function startConversation(
+  token: string,
+  targetUserId: string,
+  context?: string,
+  maxTurns?: number
+): Promise<ConversationResponse> {
+  return apiRequest<ConversationResponse>("/v1/conversation/start", token, {
+    method: "POST",
+    body: JSON.stringify({
+      targetUserId,
+      context: context || "first_meeting",
+      maxTurns: maxTurns || 10,
+    }),
+  })
+}
+
+/**
+ * Get a specific conversation by ID.
+ */
+export async function getConversation(
+  token: string,
+  conversationId: string
+): Promise<ConversationResponse> {
+  return apiRequest<ConversationResponse>(`/v1/conversation/${conversationId}`, token, {
+    method: "GET",
+  })
+}
+
+/**
+ * Get all conversations for the current user.
+ */
+export async function getUserConversations(token: string): Promise<ConversationResponse[]> {
+  return apiRequest<ConversationResponse[]>("/v1/conversation", token, {
+    method: "GET",
+  })
+}
+
+// ============================================================
+// Matching / Introduction Endpoints
+// ============================================================
+
+export interface AcceptIntroductionResponse {
+  success: boolean
+  match: {
+    id: string
+    userA: string
+    userB: string
+    status: string
+    conversationId?: string
+    compatibilityScore: number
+  }
+}
+
+/**
+ * Accept an introduction for a match. On success the backend transitions the
+ * match to ACTIVE (unlocking the human chat) and notifies the other user.
+ */
+export async function acceptIntroduction(
+  token: string,
+  matchId: string
+): Promise<AcceptIntroductionResponse> {
+  return apiRequest<AcceptIntroductionResponse>(`/v1/matching/${matchId}/accept`, token, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+// ============================================================
+// Connection Endpoints
+// ============================================================
+
+export interface ConnectionResponse {
+  id: string
+  currentUserId: string
+  targetUserId: string
+  conversationId: string
+  compatibilityScore: number
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED'
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Create a connection request after a completed AI conversation.
+ */
+export async function createConnection(
+  token: string,
+  targetUserId: string,
+  conversationId: string
+): Promise<ConnectionResponse> {
+  return apiRequest<ConnectionResponse>("/v1/connections", token, {
+    method: "POST",
+    body: JSON.stringify({ targetUserId, conversationId }),
+  })
+}
+
+/**
+ * Get all connections for the current user.
+ */
+export async function getConnections(
+  token: string,
+  status?: 'PENDING' | 'ACCEPTED' | 'DECLINED',
+  conversationId?: string
+): Promise<ConnectionResponse[]> {
+  let url = "/v1/connections"
+  const params = new URLSearchParams()
+  if (status) params.append("status", status)
+  if (conversationId) params.append("conversationId", conversationId)
+  if (params.toString()) url += `?${params.toString()}`
+  
+  return apiRequest<ConnectionResponse[]>(url, token, {
+    method: "GET",
+  })
+}
+
+/**
+ * Get a single connection by its ID. Used by the human chat page to resolve the
+ * connection status and the two participants.
+ */
+export async function getConnectionById(
+  token: string,
+  connectionId: string
+): Promise<ConnectionResponse> {
+  return apiRequest<ConnectionResponse>(`/v1/connections/${connectionId}`, token, {
+    method: "GET",
+  })
+}
+
+/**
+ * Accept a connection request.
+ */
+export async function acceptConnection(
+  token: string,
+  connectionId: string
+): Promise<ConnectionResponse> {
+  return apiRequest<ConnectionResponse>(`/v1/connections/${connectionId}/accept`, token, {
+    method: "PATCH",
+  })
+}
+
+/**
+ * Decline a connection request.
+ */
+export async function declineConnection(
+  token: string,
+  connectionId: string
+): Promise<ConnectionResponse> {
+  return apiRequest<ConnectionResponse>(`/v1/connections/${connectionId}/decline`, token, {
+    method: "PATCH",
+  })
+}
+
+// ============================================================
+// Human Chat / Message Endpoints
+// ============================================================
+
+export interface MessageResponse {
+  id: string
+  connectionId: string
+  senderId: string
+  content: string
+  createdAt: string
+  updatedAt?: string
+}
+
+/**
+ * Get the human chat history for a connection (oldest → newest).
+ * The backend only returns messages when the connection is ACCEPTED and the
+ * current user is a participant.
+ */
+export async function getMessages(
+  token: string,
+  connectionId: string
+): Promise<MessageResponse[]> {
+  return apiRequest<MessageResponse[]>(`/v1/connections/${connectionId}/messages`, token, {
+    method: "GET",
+  })
+}
+
+/**
+ * Send (persist) a human chat message in a connection.
+ */
+export async function sendMessage(
+  token: string,
+  connectionId: string,
+  content: string
+): Promise<MessageResponse> {
+  return apiRequest<MessageResponse>(`/v1/connections/${connectionId}/messages`, token, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  })
+}
+
+// ============================================================
+// Notification Endpoints
+// ============================================================
+
+export interface NotificationResponse {
+  id: string
+  userId: string
+  type:
+    | 'MATCH_FOUND'
+    | 'CONVERSATION_COMPLETE'
+    | 'TWIN_UPDATED'
+    | 'CONNECTION_REQUEST'
+    | 'CONNECTION_ACCEPTED'
+    | string
+  title: string
+  message: string
+  data: Record<string, any>
+  read: boolean
+  createdAt: string
+}
+
+/**
+ * Get all notifications for the current user (newest first).
+ */
+export async function getNotifications(token: string): Promise<NotificationResponse[]> {
+  return apiRequest<NotificationResponse[]>("/v1/notifications", token, {
+    method: "GET",
+  })
+}
+
+/**
+ * Mark a single notification as read.
+ */
+export async function markNotificationAsRead(
+  token: string,
+  notificationId: string
+): Promise<void> {
+  return apiRequest<void>(`/v1/notifications/${notificationId}/read`, token, {
+    method: "PATCH",
+  })
+}
+
 // ============================================================
 // User-Friendly Error Messages
 // ============================================================
@@ -213,6 +616,9 @@ export function getFriendlyErrorMessage(error: unknown): string {
     case 400:
       if (error.message.includes("60%")) {
         return "Please fill in more profile details before creating your twin."
+      }
+      if (error.message.includes("busy")) {
+        return "One or both twins are currently in another conversation. Please try again shortly."
       }
       return "Some of your profile data couldn't be saved. Please review and try again."
     case 401:

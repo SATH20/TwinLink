@@ -11,32 +11,41 @@ export class NotificationsRepository extends FirebaseRepository<AppNotification>
   }
 
   /**
-   * Find all notifications for a specific user, ordered by creation date descending
-   * @param userId User's ID
-   * @returns Array of notifications
+   * Find all notifications for a specific user, ordered by creation date descending.
+   *
+   * The ordering is done in memory (rather than a Firestore `orderBy`) so the
+   * query only needs the single-field index on `userId` that Firestore provides
+   * automatically, and never requires a composite index to be provisioned.
    */
   async findByUserId(userId: string): Promise<AppNotification[]> {
     const snapshot = await this.collection
       .where('userId', '==', userId)
-      .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as AppNotification));
+    return snapshot.docs
+      .map((doc: any) => ({ id: doc.id, ...doc.data() } as AppNotification))
+      .sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
   }
 
   /**
-   * Find all unread notifications for a specific user
-   * @param userId User's ID
-   * @returns Array of unread notifications
+   * Find all unread notifications for a specific user (newest first).
+   *
+   * Uses a single-field `userId` filter and applies the `read` filter + ordering
+   * in memory, so no composite index is required.
    */
   async findUnread(userId: string): Promise<AppNotification[]> {
     const snapshot = await this.collection
       .where('userId', '==', userId)
-      .where('read', '==', false)
-      .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as AppNotification));
+    return snapshot.docs
+      .map((doc: any) => ({ id: doc.id, ...doc.data() } as AppNotification))
+      .filter((n) => n.read === false)
+      .sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
   }
 
   /**

@@ -21,13 +21,28 @@ import {
   Brain,
   Wifi,
   Mail,
-  User
+  User,
+  AlertCircle,
+  RefreshCw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useUser } from "@clerk/nextjs"
+import { useDashboardData } from "@/hooks/use-dashboard-data"
+import {
+  getTwinStatusLabel,
+  getTwinStatusColor,
+  formatRelativeTime,
+  calculateTwinHealth,
+  getTwinMission,
+  calculateLearningProgress,
+  generateTwinSummary,
+  getUserInitials,
+} from "@/lib/utils/dashboard.utils"
 import {
   MatchRecommendationsCard,
   RecentConversationsCard,
@@ -38,12 +53,8 @@ import {
 } from "@/components/dashboard-components"
 
 export default function DashboardPage() {
-  // Mock user data for demo
-  const mockUser = {
-    firstName: "Alex",
-    imageUrl: null
-  }
-
+  const { user: clerkUser } = useUser()
+  const { data, isLoading, error, refetch } = useDashboardData()
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
@@ -57,6 +68,19 @@ export default function DashboardPage() {
     if (hour < 18) return "Good afternoon"
     return "Good evening"
   }
+
+  // Show loading state
+  if (isLoading) {
+    return <DashboardSkeleton />
+  }
+
+  // Show error state
+  if (error || !data) {
+    return <DashboardError error={error} onRetry={refetch} />
+  }
+
+  const { user, profile, twin } = data
+  const userName = user?.name?.split(' ')[0] || clerkUser?.firstName || 'User'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-[#156d95]/5">
@@ -80,13 +104,16 @@ export default function DashboardPage() {
                 <Clock className="w-4 h-4" />
                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-[#156d95] rounded-full" />
+              <Button variant="ghost" size="icon" className="relative" asChild>
+                <Link href="/notifications">
+                  <Bell className="w-5 h-5" />
+                  <span className="absolute top-1 right-1 w-2 h-2 bg-[#156d95] rounded-full" />
+                </Link>
               </Button>
               <Avatar className="w-8 h-8 cursor-pointer">
+                <AvatarImage src={clerkUser?.imageUrl} />
                 <AvatarFallback className="bg-gradient-to-br from-[#156d95] to-[#8b5cf6] text-white">
-                  {mockUser.firstName[0]}
+                  {getUserInitials(user?.name || '')}
                 </AvatarFallback>
               </Avatar>
             </div>
@@ -108,18 +135,18 @@ export default function DashboardPage() {
               className="space-y-2"
             >
               <h1 className="text-4xl font-bold text-foreground" style={{ fontFamily: "Figtree" }}>
-                {getGreeting()}, {mockUser.firstName}! 👋
+                {getGreeting()}, {userName}! 👋
               </h1>
               <p className="text-lg text-muted-foreground" style={{ fontFamily: "Figtree" }}>
-                Your AI Twin has been exploring the network while you were away.
+                {generateTwinSummary(twin!, profile)}
               </p>
             </motion.div>
 
             {/* Twin Status Hero Card */}
-            <TwinStatusCard />
+            <TwinStatusCard twin={twin} />
 
             {/* Today's Activity */}
-            <TodayActivityCard />
+            <TodayActivityCard twin={twin} />
 
             {/* Match Recommendations */}
             <MatchRecommendationsCard />
@@ -148,14 +175,15 @@ export default function DashboardPage() {
   )
 }
 
-// Sidebar Component
+// Sidebar Component (unchanged)
 function Sidebar() {
   const navItems = [
     { icon: BarChart3, label: "Dashboard", href: "/dashboard", active: true },
     { icon: Bot, label: "My Twin", href: "/my-twin" },
     { icon: Heart, label: "Recommendations", href: "/recommendations" },
-    { icon: MessageSquare, label: "Conversations", href: "/conversations" },
-    { icon: Mail, label: "Messages", href: "/messages" },
+    { icon: Users, label: "Connections", href: "/connections" },
+    { icon: MessageSquare, label: "Conversations", href: "/twin-conversation" },
+    { icon: Mail, label: "Chat", href: "/chat" },
     { icon: Bell, label: "Notifications", href: "/notifications" },
     { icon: Settings, label: "Settings", href: "/settings" },
   ]
@@ -192,8 +220,37 @@ function Sidebar() {
   )
 }
 
-// Twin Status Hero Card
-function TwinStatusCard() {
+// Twin Status Hero Card - Now with Real Data
+function TwinStatusCard({ twin }: { twin: any }) {
+  if (!twin) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#156d95]/10 via-[#8b5cf6]/10 to-[#0ea5e9]/10 border border-[#156d95]/20 p-8"
+      >
+        <div className="relative z-10 text-center py-12">
+          <Bot className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+          <h3 className="text-xl font-semibold text-foreground mb-2" style={{ fontFamily: "Figtree" }}>
+            No Digital Twin Found
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            Create your Digital Twin to start finding meaningful connections
+          </p>
+          <Button className="bg-gradient-to-r from-[#156d95] to-[#8b5cf6] text-white">
+            Create Twin
+          </Button>
+        </div>
+      </motion.div>
+    )
+  }
+
+  const statusColors = getTwinStatusColor(twin.status)
+  const twinHealth = calculateTwinHealth(twin)
+  const learningProgress = calculateLearningProgress(twin)
+  const conversationCount = twin.memory?.conversations?.length || 0
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -247,31 +304,36 @@ function TwinStatusCard() {
                 🤖 Your Digital Twin
               </h2>
               <div className="flex items-center gap-2 mb-1">
-                <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
-                  <span className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse" />
-                  ACTIVE
+                <Badge className={`${statusColors.bg} ${statusColors.text} ${statusColors.border}`}>
+                  <span className={`w-2 h-2 rounded-full ${statusColors.text.replace('text-', 'bg-')} mr-2 animate-pulse`} />
+                  {getTwinStatusLabel(twin.status)}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  v{twin.version}
                 </Badge>
               </div>
               <p className="text-muted-foreground" style={{ fontFamily: "Figtree" }}>
-                Mission: Searching for meaningful connections
+                Mission: {getTwinMission(twin)}
               </p>
             </div>
           </div>
 
-          <Button className="bg-gradient-to-r from-[#156d95] to-[#8b5cf6] text-white hover:opacity-90">
-            <Eye className="w-4 h-4 mr-2" />
-            View Twin
-          </Button>
+          <Link href="/my-twin">
+            <Button className="bg-gradient-to-r from-[#156d95] to-[#8b5cf6] text-white hover:opacity-90">
+              <Eye className="w-4 h-4 mr-2" />
+              View Twin
+            </Button>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="p-5 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-[#156d95]/30 transition-all">
             <div className="text-sm text-muted-foreground mb-1">Twin Health</div>
-            <div className="text-3xl font-bold text-foreground mb-2">100%</div>
+            <div className="text-3xl font-bold text-foreground mb-2">{twinHealth}%</div>
             <div className="w-full h-2 bg-muted rounded-full mt-2 overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: "100%" }}
+                animate={{ width: `${twinHealth}%` }}
                 transition={{ duration: 1, delay: 0.5 }}
                 className="h-full bg-gradient-to-r from-green-500 to-emerald-500"
               />
@@ -280,19 +342,21 @@ function TwinStatusCard() {
 
           <div className="p-5 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-[#156d95]/30 transition-all">
             <div className="text-sm text-muted-foreground mb-1">Last Active</div>
-            <div className="text-3xl font-bold text-foreground mb-2">2 min ago</div>
+            <div className="text-2xl font-bold text-foreground mb-2">
+              {formatRelativeTime(twin.lastWake)}
+            </div>
             <div className="flex items-center gap-1 mt-2 text-xs text-green-600">
               <Activity className="w-3 h-3" />
-              Currently exploring
+              {twin.status === 'ASLEEP' ? 'Resting' : 'Currently active'}
             </div>
           </div>
 
           <div className="p-5 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-[#156d95]/30 transition-all">
-            <div className="text-sm text-muted-foreground mb-1">Conversations Today</div>
-            <div className="text-3xl font-bold text-foreground mb-2">17</div>
+            <div className="text-sm text-muted-foreground mb-1">Total Conversations</div>
+            <div className="text-3xl font-bold text-foreground mb-2">{conversationCount}</div>
             <div className="flex items-center gap-1 mt-2 text-xs text-[#156d95]">
               <TrendingUp className="w-3 h-3" />
-              +5 since yesterday
+              {learningProgress}% Learning Progress
             </div>
           </div>
         </div>
@@ -301,15 +365,45 @@ function TwinStatusCard() {
   )
 }
 
-// Today's Activity Card
-function TodayActivityCard() {
+// Today's Activity Card - Updated with Real Data
+function TodayActivityCard({ twin }: { twin: any }) {
   const activities = [
-    { icon: Users, label: "Explored 148 Twins", color: "text-blue-500", bgColor: "bg-blue-500/10" },
-    { icon: MessageSquare, label: "Started 12 AI Conversations", color: "text-purple-500", bgColor: "bg-purple-500/10" },
-    { icon: Zap, label: "Continued 5 Conversations", color: "text-yellow-500", bgColor: "bg-yellow-500/10" },
-    { icon: Eye, label: "Evaluated 27 Profiles", color: "text-green-500", bgColor: "bg-green-500/10" },
-    { icon: Heart, label: "Found 4 High Compatibility Matches", color: "text-pink-500", bgColor: "bg-pink-500/10" },
-    { icon: Brain, label: "Learned New Preferences", color: "text-indigo-500", bgColor: "bg-indigo-500/10" },
+    { 
+      icon: Users, 
+      label: `Explored ${twin?.memory?.matchHistory?.length || 0} Twins`, 
+      color: "text-blue-500", 
+      bgColor: "bg-blue-500/10" 
+    },
+    { 
+      icon: MessageSquare, 
+      label: `Completed ${twin?.memory?.conversations?.length || 0} AI Conversations`, 
+      color: "text-purple-500", 
+      bgColor: "bg-purple-500/10" 
+    },
+    { 
+      icon: Brain, 
+      label: `Discovered ${twin?.memory?.insights?.length || 0} Insights`, 
+      color: "text-indigo-500", 
+      bgColor: "bg-indigo-500/10" 
+    },
+    { 
+      icon: Zap, 
+      label: "Processing Preferences", 
+      color: "text-yellow-500", 
+      bgColor: "bg-yellow-500/10" 
+    },
+    { 
+      icon: Eye, 
+      label: "Evaluating Compatibility", 
+      color: "text-green-500", 
+      bgColor: "bg-green-500/10" 
+    },
+    { 
+      icon: Heart, 
+      label: "Finding High Compatibility Matches", 
+      color: "text-pink-500", 
+      bgColor: "bg-pink-500/10" 
+    },
   ]
 
   return (
@@ -321,9 +415,9 @@ function TodayActivityCard() {
     >
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-xl font-semibold text-foreground" style={{ fontFamily: "Figtree" }}>
-          Today's Twin Activity
+          Twin Activity Summary
         </h3>
-        <Badge variant="secondary" className="text-xs">Last 24 hours</Badge>
+        <Badge variant="secondary" className="text-xs">Version {twin?.version || 1}</Badge>
       </div>
 
       <div className="space-y-3">
@@ -352,13 +446,13 @@ function TodayActivityCard() {
   )
 }
 
-// Notifications Card
+// Notifications Card (unchanged)
 function NotificationsCard() {
   const notifications = [
     { 
       icon: Heart, 
       title: "New Match Found", 
-      message: "Sarah Chen - 94% compatibility", 
+      message: "Your twin discovered a high compatibility match", 
       time: "5 minutes ago",
       color: "text-pink-500",
       bgColor: "bg-pink-500/10"
@@ -366,7 +460,7 @@ function NotificationsCard() {
     { 
       icon: MessageSquare, 
       title: "Conversation Completed", 
-      message: "Your Twin finished talking with Alex's Twin", 
+      message: "Your Twin finished an insightful conversation", 
       time: "1 hour ago",
       color: "text-blue-500",
       bgColor: "bg-blue-500/10"
@@ -400,9 +494,11 @@ function NotificationsCard() {
         <h3 className="text-xl font-semibold text-foreground" style={{ fontFamily: "Figtree" }}>
           Recent Notifications
         </h3>
-        <Button variant="ghost" size="sm" className="text-[#156d95]">
-          View All <ArrowRight className="w-3 h-3 ml-1" />
-        </Button>
+        <Link href="/notifications">
+          <Button variant="ghost" size="sm" className="text-[#156d95]">
+            View All <ArrowRight className="w-3 h-3 ml-1" />
+          </Button>
+        </Link>
       </div>
 
       <div className="space-y-3">
@@ -426,5 +522,80 @@ function NotificationsCard() {
         ))}
       </div>
     </motion.div>
+  )
+}
+
+// Loading Skeleton Component
+function DashboardSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-[#156d95]/5">
+      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-10 h-10 rounded-xl" />
+              <Skeleton className="w-24 h-6 hidden sm:block" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Skeleton className="w-8 h-8 rounded-full" />
+              <Skeleton className="w-8 h-8 rounded-full" />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex gap-8">
+          <aside className="hidden lg:block w-64 space-y-2">
+            {[...Array(7)].map((_, i) => (
+              <Skeleton key={i} className="w-full h-11 rounded-lg" />
+            ))}
+          </aside>
+
+          <main className="flex-1 space-y-6">
+            <div>
+              <Skeleton className="w-80 h-10 mb-2" />
+              <Skeleton className="w-96 h-6" />
+            </div>
+            <Skeleton className="w-full h-64 rounded-3xl" />
+            <Skeleton className="w-full h-96 rounded-2xl" />
+          </main>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Error State Component
+function DashboardError({ error, onRetry }: { error: Error | null; onRetry: () => void }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-[#156d95]/5 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="max-w-md w-full rounded-2xl bg-card border border-border p-8 text-center"
+      >
+        <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="w-8 h-8 text-red-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-foreground mb-2" style={{ fontFamily: "Figtree" }}>
+          Unable to Load Dashboard
+        </h2>
+        <p className="text-muted-foreground mb-6">
+          {error?.message || 'An unexpected error occurred while loading your dashboard data.'}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Button onClick={onRetry} className="bg-[#156d95] text-white">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Try Again
+          </Button>
+          <Link href="/">
+            <Button variant="outline">
+              Go Home
+            </Button>
+          </Link>
+        </div>
+      </motion.div>
+    </div>
   )
 }

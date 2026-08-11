@@ -44,7 +44,19 @@ function AnimatedRing({ percentage, size = 44, strokeWidth = 3 }: { percentage: 
   )
 }
 
-export function TwinConversationHeader() {
+export function TwinConversationHeader({
+  compatibilityScore = 0,
+  confidenceScore = 0,
+  duration = "0s",
+  status = "pending"
+}: {
+  compatibilityScore?: number
+  confidenceScore?: number
+  duration?: string
+  status?: string
+}) {
+  const statusColor = status === "COMPLETED" ? "#10b981" : status === "IN_PROGRESS" ? "#f59e0b" : "#6b7280"
+  const statusText = status === "COMPLETED" ? "Completed" : status === "IN_PROGRESS" ? "In Progress" : "Pending"
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
@@ -108,16 +120,21 @@ export function TwinConversationHeader() {
             {/* Status */}
             <motion.div
               whileHover={{ scale: 1.05 }}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#10b981]/10 border border-[#10b981]/25"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border"
+              style={{
+                backgroundColor: `${statusColor}10`,
+                borderColor: `${statusColor}25`
+              }}
             >
               <motion.div
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="w-2 h-2 rounded-full bg-[#10b981]"
+                animate={{ scale: status === "IN_PROGRESS" ? [1, 1.3, 1] : 1 }}
+                transition={{ duration: 2, repeat: status === "IN_PROGRESS" ? Infinity : 0 }}
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: statusColor }}
               />
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Status</div>
-                <div className="text-sm font-bold text-[#10b981]">Completed</div>
+                <div className="text-sm font-bold" style={{ color: statusColor }}>{statusText}</div>
               </div>
             </motion.div>
 
@@ -127,14 +144,14 @@ export function TwinConversationHeader() {
               className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-br from-[#156d95]/10 to-[#8b5cf6]/10 border border-[#156d95]/25"
             >
               <div className="relative flex items-center justify-center">
-                <AnimatedRing percentage={94} />
+                <AnimatedRing percentage={compatibilityScore} />
                 <span className="absolute text-xs font-bold bg-gradient-to-r from-[#156d95] to-[#8b5cf6] bg-clip-text text-transparent">
-                  94
+                  {compatibilityScore}
                 </span>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Compatibility</div>
-                <div className="text-sm font-bold bg-gradient-to-r from-[#156d95] to-[#8b5cf6] bg-clip-text text-transparent">94%</div>
+                <div className="text-sm font-bold bg-gradient-to-r from-[#156d95] to-[#8b5cf6] bg-clip-text text-transparent">{compatibilityScore}%</div>
               </div>
             </motion.div>
 
@@ -146,7 +163,7 @@ export function TwinConversationHeader() {
               <Shield className="w-4 h-4 text-[#8b5cf6]" />
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Confidence</div>
-                <div className="text-sm font-bold text-[#8b5cf6]">96%</div>
+                <div className="text-sm font-bold text-[#8b5cf6]">{confidenceScore}%</div>
               </div>
             </motion.div>
 
@@ -158,7 +175,7 @@ export function TwinConversationHeader() {
               <Clock className="w-4 h-4 text-muted-foreground" />
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Duration</div>
-                <div className="text-sm font-bold text-foreground font-mono">3m 42s</div>
+                <div className="text-sm font-bold text-foreground font-mono">{duration}</div>
               </div>
             </motion.div>
           </motion.div>

@@ -45,6 +45,36 @@ def _calculate_values_alignment(profile_a: Dict[str, Any], profile_b: Dict[str, 
     return (len(intersection) / len(union)) * 100
 
 
+def _normalize_trait(value: Any) -> float:
+    """
+    Normalize a Big Five trait value into the [0, 1] domain.
+
+    Profiles may store traits on a 0-1 scale (as declared by PersonalityTraits)
+    or on a 0-100 scale (as used by stored user profiles). Values above 1 are
+    treated as a 0-100 scale and divided down. The result is constrained to the
+    trait's valid [0, 1] domain so downstream similarity math stays well-defined.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+
+    if v > 1.0:  # 0-100 scale -> normalize to 0-1
+        v = v / 100.0
+
+    return min(1.0, max(0.0, v))
+
+
+def _bounded_score(value: float) -> float:
+    """
+    Constrain a computed dimension score to the valid [0, 100] range and round
+    it. The individual dimension formulas are already normalized to produce
+    0-100 values; this is a uniform final guarantee so every dimension conforms
+    to the DetailedAnalysis schema (which requires 0 <= x <= 100).
+    """
+    return round(min(100.0, max(0.0, value)), 1)
+
+
 def _calculate_personality_compatibility(
     profile_a: Dict[str, Any], profile_b: Dict[str, Any],
 ) -> float:
@@ -72,9 +102,19 @@ def _calculate_personality_compatibility(
     total_score = 0.0
     total_weight = 0.0
 
+    # Log the raw inputs feeding the emotional calculation so any future
+    # out-of-range personality data is visible before it is used.
+    print(
+        f"[compatibility] raw personality_a={personality_a} "
+        f"personality_b={personality_b}",
+        flush=True,
+    )
+
     for trait in traits:
-        val_a = personality_a.get(trait, 0.5)
-        val_b = personality_b.get(trait, 0.5)
+        # Normalize to [0, 1] so `1.0 - abs(diff)` stays within [0, 1]
+        # regardless of whether traits arrive on a 0-1 or 0-100 scale.
+        val_a = _normalize_trait(personality_a.get(trait, 0.5))
+        val_b = _normalize_trait(personality_b.get(trait, 0.5))
         weight = similarity_weights.get(trait, 0.5)
         similarity = 1.0 - abs(val_a - val_b)
         total_score += similarity * weight
@@ -282,7 +322,7 @@ def analyze_compatibility(data: CompatibilityRequest) -> CompatibilityResponse:
     profile_b = data.twinBProfile
 
     # Calculate dimension scores
-    emotional_score = _calculate_personality_compatibility(profile_a, profile_b)
+    personality_score = _calculate_personality_compatibility(profile_a, profile_b)
     intellectual_score = _calculate_interest_similarity(profile_a, profile_b)
     lifestyle_score = _calculate_lifestyle_compatibility(profile_a, profile_b)
     values_score = _calculate_values_alignment(profile_a, profile_b)
@@ -290,15 +330,28 @@ def analyze_compatibility(data: CompatibilityRequest) -> CompatibilityResponse:
 
     # Factor in transcript sentiment
     sentiment_bonus = _analyze_transcript_sentiment(data.transcript)
-    # Blend sentiment into emotional score
-    emotional_score = (emotional_score * 0.7) + (sentiment_bonus * 0.3)
+    # Blend personality alignment with conversation sentiment for the emotional score
+    emotional_score = (personality_score * 0.7) + (sentiment_bonus * 0.3)
 
+    # Debug: surface the raw calculated component values before Pydantic
+    # validation so each dimension can be verified to sit within [0, 100].
+    print(
+        "[compatibility] raw components -> "
+        f"personality={personality_score:.1f}, sentiment={sentiment_bonus:.1f}, "
+        f"emotional={emotional_score:.1f}, intellectual={intellectual_score:.1f}, "
+        f"lifestyle={lifestyle_score:.1f}, values={values_score:.1f}, "
+        f"communication={communication_score:.1f}",
+        flush=True,
+    )
+
+    # Apply the same [0, 100] validation to every dimension before building
+    # the response so no single formula can violate the DetailedAnalysis schema.
     detailed = DetailedAnalysis(
-        emotional=round(emotional_score, 1),
-        intellectual=round(intellectual_score, 1),
-        lifestyle=round(lifestyle_score, 1),
-        values=round(values_score, 1),
-        communication=round(communication_score, 1),
+        emotional=_bounded_score(emotional_score),
+        intellectual=_bounded_score(intellectual_score),
+        lifestyle=_bounded_score(lifestyle_score),
+        values=_bounded_score(values_score),
+        communication=_bounded_score(communication_score),
     )
 
     # Weighted overall score
@@ -332,6 +385,11 @@ def analyze_compatibility(data: CompatibilityRequest) -> CompatibilityResponse:
         data_points += 1
     confidence = min(95, (data_points / 5) * 100)
 
+    print(
+        f"[compatibility] derived -> overall={overall_score:.1f}, confidence={confidence:.1f}",
+        flush=True,
+    )
+
     strengths = _generate_strengths(detailed, profile_a, profile_b)
     weaknesses = _generate_weaknesses(detailed, profile_a, profile_b)
     recommendation = _get_recommendation(overall_score)
@@ -345,8 +403,8 @@ def analyze_compatibility(data: CompatibilityRequest) -> CompatibilityResponse:
         summary_parts.append("Limited compatibility based on current profiles.")
 
     return CompatibilityResponse(
-        compatibilityScore=round(overall_score, 1),
-        confidenceScore=round(confidence, 1),
+        compatibilityScore=_bounded_score(overall_score),
+        confidenceScore=_bounded_score(confidence),
         strengths=strengths,
         weaknesses=weaknesses,
         recommendation=recommendation,

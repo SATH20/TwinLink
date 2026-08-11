@@ -7,25 +7,42 @@ export class AuthService {
 
   /**
    * Syncs a Clerk user with Firestore.
-   * Creates the user if they do not exist.
+   * Creates the user if they do not exist, and backfills a missing display name.
    * @param clerkUserId Clerk user ID
    * @param email User email
-   * @param firstName User first name
-   * @param lastName User last name
+   * @param firstName User first name (from token claims, may be empty)
+   * @param lastName User last name (from token claims, may be empty)
+   * @param providedName Full name supplied by the client (from Clerk profile)
    * @returns User object and isNewUser flag
    */
-  async syncUser(clerkUserId: string, email: string, firstName?: string, lastName?: string) {
+  async syncUser(
+    clerkUserId: string,
+    email: string,
+    firstName?: string,
+    lastName?: string,
+    providedName?: string,
+  ) {
+    // Prefer the explicitly provided name, fall back to token claim parts.
+    const resolvedName =
+      (providedName && providedName.trim()) ||
+      [firstName, lastName].filter(Boolean).join(' ').trim();
+
     let user = await this.usersService.findByClerkId(clerkUserId);
     let isNewUser = false;
 
     if (!user) {
-      const name = [firstName, lastName].filter(Boolean).join(' ');
       user = await this.usersService.createUser({
         clerkId: clerkUserId,
         email,
-        name: name || 'Anonymous',
+        name: resolvedName || 'Anonymous',
       });
       isNewUser = true;
+    } else if (
+      resolvedName &&
+      (!user.name || user.name.trim() === '' || user.name === 'Anonymous')
+    ) {
+      // Backfill a real name for users previously created without one.
+      user = await this.usersService.updateUser(clerkUserId, { name: resolvedName });
     }
 
     return { user, isNewUser };

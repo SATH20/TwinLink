@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 export interface FilteredCandidate {
   profile: any; // Using any for Profile to avoid missing types in this stub if profile entity doesn't exist yet
@@ -12,6 +12,8 @@ export interface FilteredCandidate {
  */
 @Injectable()
 export class CandidateFilterEngine {
+  private readonly logger = new Logger(CandidateFilterEngine.name);
+
   /**
    * Runs a candidate through the filtering pipeline.
    * @param userProfile The profile of the user seeking a match
@@ -21,6 +23,7 @@ export class CandidateFilterEngine {
    */
   filterCandidates(userProfile: any, candidates: any[], userPreferences?: any): FilteredCandidate[] {
     const results: FilteredCandidate[] = [];
+    this.logger.log(`[FILTER ENGINE] Starting with ${candidates.length} candidates`);
 
     for (const candidate of candidates) {
       let eliminatedBy: string | undefined;
@@ -159,10 +162,18 @@ export class CandidateFilterEngine {
     const dealBreakers = userProfile?.preferences?.dealBreakers || [];
     if (dealBreakers.length === 0) return true;
 
-    const candidateValues = JSON.stringify(candidate?.lifestyle || {}).toLowerCase();
-    
+    // IMPORTANT: only compare against the lifestyle VALUES, never the JSON of
+    // the whole object. Stringifying the object leaks the field *names*
+    // (e.g. "smoking", "drinking"), so a "Smoking" deal breaker used to match
+    // the `smoking` key present on EVERY profile — rejecting even non-smokers
+    // (`smoking: "no"`) and eliminating every candidate.
+    const candidateValues = Object.values(candidate?.lifestyle || {})
+      .filter((v): v is string => typeof v === 'string')
+      .map((v) => v.toLowerCase());
+
     for (const db of dealBreakers) {
-      if (candidateValues.includes(db.toLowerCase())) {
+      const needle = db.toLowerCase();
+      if (candidateValues.some((value) => value.includes(needle))) {
         return false;
       }
     }

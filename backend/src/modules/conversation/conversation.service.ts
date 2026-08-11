@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { ConversationRepository } from './conversation.repository';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { Conversation } from './entities/conversation.entity';
@@ -12,6 +12,13 @@ import { ProfilesService } from '../profiles/profiles.service';
  */
 @Injectable()
 export class ConversationService {
+  private readonly logger = new Logger(ConversationService.name);
+
+  // Conversations whose compatibility analysis is currently running in this
+  // process. Prevents a page reload (which re-triggers a stuck analysis) from
+  // spawning a second concurrent analysis for the same conversation.
+  private readonly analysisInFlight = new Set<string>();
+
   constructor(
     private readonly conversationRepository: ConversationRepository,
     private readonly twinsService: TwinsService,
@@ -70,16 +77,27 @@ export class ConversationService {
       const aiResult = await this.aiService.runConversation(requestDto);
 
       // 6. Create conversation record
+      const messages = Array.isArray(aiResult.messages) ? aiResult.messages : [];
       const conversationData: Partial<Conversation> = {
         twinA: userTwin.id,
         twinB: targetTwin.id,
         userA: userId,
         userB: dto.targetUserId,
-        messages: aiResult.messages,
+        messages,
         summary: aiResult.summary,
         topicsDiscussed: aiResult.topicsDiscussed,
         emotionalTone: aiResult.emotionalTone,
         compatibilityScore: 0,
+        confidenceScore: 0,
+        strengths: [],
+        weaknesses: [],
+        recommendation: '',
+        detailedAnalysis: null,
+        // Default reasoning iterations to the number of messages exchanged.
+        // The compatibility analysis may refine this later.
+        reasoningIterations: messages.length,
+        analysisComplete: false,
+        matchId: null,
         status: 'COMPLETED',
       };
 
@@ -110,9 +128,21 @@ export class ConversationService {
 
   /**
    * Internal method to trigger compatibility analysis asynchronously.
+   *
+   * Guarded against concurrent/duplicate runs for the same conversation so the
+   * reload self-heal (see getConversationForClient) can safely re-trigger a
+   * stuck analysis without racing an analysis that is already in progress.
    */
   private async triggerCompatibilityAnalysis(conversationId: string): Promise<void> {
-    await this.compatibilityService.analyzeCompatibility(conversationId);
+    if (this.analysisInFlight.has(conversationId)) {
+      return;
+    }
+    this.analysisInFlight.add(conversationId);
+    try {
+      await this.compatibilityService.analyzeCompatibility(conversationId);
+    } finally {
+      this.analysisInFlight.delete(conversationId);
+    }
   }
 
   /**
@@ -129,11 +159,57 @@ export class ConversationService {
   }
 
   /**
+   * Fetch a conversation for a client request, self-healing a stuck analysis.
+   *
+   * A conversation whose twins have finished talking (status COMPLETED) but
+   * whose async compatibility analysis never persisted (analysisComplete=false)
+   * would otherwise leave the UI stuck on "Analyzing compatibility..." forever:
+   * the original analysis is fire-and-forget and can be lost to a crash,
+   * restart, or a dropped promise, and a plain fetch never re-runs it. Here we
+   * re-trigger the analysis (fire-and-forget, de-duplicated) so a simple page
+   * reload recovers the evaluation report — the frontend poller then picks up
+   * the completed result. FAILED conversations are left untouched (terminal;
+   * the UI offers a retry).
+   */
+  async getConversationForClient(conversationId: string): Promise<Conversation> {
+    const conversation = await this.getConversation(conversationId);
+
+    if (conversation.status === 'COMPLETED' && !conversation.analysisComplete) {
+      this.logger.warn(
+        `Conversation ${conversation.id} is COMPLETED but analysis is incomplete — ` +
+          `re-triggering compatibility analysis.`,
+      );
+      this.triggerCompatibilityAnalysis(conversation.id).catch((err) => {
+        this.logger.error(
+          `Failed to re-trigger compatibility analysis for conversation ${conversation.id}: ` +
+            `${(err as Error).message}`,
+        );
+      });
+    }
+
+    return conversation;
+  }
+
+  /**
    * Get all conversations for a user.
    * @param userId The user's ID
    * @returns Array of conversations
    */
   async getUserConversations(userId: string): Promise<Conversation[]> {
     return this.conversationRepository.findByUserId(userId);
+  }
+
+  /**
+   * Persist partial updates to a conversation (used by the compatibility
+   * service to write the analysis results back onto the conversation record).
+   * @param conversationId The ID of the conversation
+   * @param data Partial fields to merge
+   * @returns The updated conversation
+   */
+  async updateConversation(
+    conversationId: string,
+    data: Partial<Conversation>,
+  ): Promise<Conversation> {
+    return this.conversationRepository.update(conversationId, data);
   }
 }

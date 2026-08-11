@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { 
   IsNumber, Min, Max, IsOptional, IsEnum, ValidateNested, 
-  IsString, IsArray
+  IsString, IsArray, MaxLength
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Gender } from '../enums/gender.enum';
@@ -66,6 +66,12 @@ export class UpdateProfileDto {
   @Max(120)
   @IsOptional()
   age?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  bio?: string;
 
   @ApiProperty({ required: false, enum: Gender })
   @IsEnum(Gender)

@@ -21,6 +21,9 @@ import { MatchingModule } from './modules/matching/matching.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
 import { CompatibilityModule } from './modules/compatibility/compatibility.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ConnectionsModule } from './modules/connections/connections.module';
+import { MessagesModule } from './modules/messages/messages.module';
+import { SeedModule } from './modules/seed/seed.module';
 // import { SchedulerModule } from './modules/scheduler/scheduler.module'; // Temporarily disabled - Redis not running
 
 // ── Health Check ──────────────────────────────────────────
@@ -72,6 +75,9 @@ import { HealthController } from './health.controller';
     ConversationModule,
     CompatibilityModule,
     NotificationsModule,
+    ConnectionsModule,
+    MessagesModule,
+    SeedModule,
     // SchedulerModule, // Temporarily disabled - Redis not running
   ],
   controllers: [HealthController],

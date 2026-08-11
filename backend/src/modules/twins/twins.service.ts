@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, BadRequestException, forwardRef, Inject } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, BadRequestException, forwardRef, Inject, Logger } from '@nestjs/common';
 import { TwinsRepository } from './twins.repository';
 import { ProfilesService } from '../profiles/profiles.service';
 import { AiService } from '../ai/ai.service';
@@ -9,6 +9,8 @@ import { GenerateTwinRequestDto } from '../ai/dto/generate-twin-request.dto';
 
 @Injectable()
 export class TwinsService {
+  private readonly logger = new Logger(TwinsService.name);
+
   constructor(
     private readonly twinsRepository: TwinsRepository,
     @Inject(forwardRef(() => ProfilesService))
@@ -22,22 +24,41 @@ export class TwinsService {
    * @returns The newly created twin
    */
   async createTwin(userId: string): Promise<Twin> {
+    this.logger.log(`[createTwin] Starting twin creation for userId: ${userId}`);
+
+    // Step 1: Retrieve profile
     const profile = await this.profilesService.getProfile(userId);
     if (!profile) {
+      this.logger.warn(`[createTwin] Profile not found for userId: ${userId}`);
       throw new NotFoundException('Profile not found');
     }
+    this.logger.log(`[createTwin] Profile found. Completeness: ${profile.completenessScore}%`);
 
     if (profile.completenessScore < 60) {
+      this.logger.warn(`[createTwin] Profile completeness too low: ${profile.completenessScore}%`);
       throw new BadRequestException('Profile must be at least 60% complete to create a twin');
     }
 
+    // Step 2: Check for existing twin
     const existingTwin = await this.twinsRepository.findByUserId(userId);
     if (existingTwin) {
+      this.logger.warn(`[createTwin] Twin already exists for userId: ${userId}`);
       throw new ConflictException('A digital twin already exists for this user');
     }
 
+    // Step 3: Prepare payload for FastAPI
+    // FastAPI PersonalityTraits expects values in range 0.0-1.0
+    // Profile stores personality scores as 0-100, so normalize them
+    const rawPersonality = profile.personality || {};
+    const normalizedPersonality: Record<string, number> = {};
+    for (const [key, value] of Object.entries(rawPersonality)) {
+      const numValue = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+      // If value > 1, it's on a 0-100 scale; normalize to 0-1
+      normalizedPersonality[key] = numValue > 1 ? numValue / 100 : numValue;
+    }
+
     const generateDto: GenerateTwinRequestDto = {
-      personality: profile.personality || {},
+      personality: normalizedPersonality,
       values: profile.values || [],
       interests: profile.interests || [],
       communicationStyle: profile.communicationStyle || 'casual',
@@ -46,8 +67,20 @@ export class TwinsService {
       preferences: profile.preferences || {},
     };
 
-    const aiResponse = await this.aiService.generateTwin(generateDto);
+    this.logger.log(`[createTwin] Payload for FastAPI:`);
+    this.logger.log(`  personality: ${JSON.stringify(generateDto.personality)}`);
+    this.logger.log(`  values: ${JSON.stringify(generateDto.values)}`);
+    this.logger.log(`  interests: [${generateDto.interests.length} items]`);
+    this.logger.log(`  communicationStyle: ${generateDto.communicationStyle}`);
+    this.logger.log(`  goals: ${JSON.stringify(generateDto.goals)}`);
+    this.logger.log(`  lifestyle: ${JSON.stringify(generateDto.lifestyle)}`);
 
+    // Step 4: Call FastAPI
+    this.logger.log(`[createTwin] Calling FastAPI /generate-twin...`);
+    const aiResponse = await this.aiService.generateTwin(generateDto);
+    this.logger.log(`[createTwin] FastAPI responded successfully. Prompt length: ${aiResponse.systemPrompt?.length || 0} chars`);
+
+    // Step 5: Store twin in Firestore
     const now = new Date().toISOString();
     const nextWake = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -66,7 +99,11 @@ export class TwinsService {
       version: 1,
     };
 
-    return this.twinsRepository.create(newTwin as Twin);
+    this.logger.log(`[createTwin] Saving twin to Firestore...`);
+    const createdTwin = await this.twinsRepository.create(newTwin as Twin);
+    this.logger.log(`[createTwin] Twin created successfully. ID: ${createdTwin.id}`);
+
+    return createdTwin;
   }
 
   /**

@@ -1,11 +1,54 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
+import * as admin from 'firebase-admin';
 import { NotificationsRepository } from './notifications.repository';
 import { AppNotification } from './entities/notification.entity';
 import { NotificationType } from './enums/notification-type.enum';
+import { FIRESTORE } from '../../firebase/firebase.constants';
+
+/**
+ * Maps a notification type to the recipient's preference key. Types not present
+ * here are always delivered (they are not user-toggleable).
+ */
+const TYPE_TO_PREFERENCE: Partial<Record<NotificationType, string>> = {
+  [NotificationType.CONNECTION_REQUEST]: 'connectionRequests',
+  [NotificationType.CONNECTION_ACCEPTED]: 'connectionAccepted',
+  [NotificationType.NEW_MESSAGE]: 'newMessages',
+  [NotificationType.TWIN_UPDATED]: 'twinUpdates',
+};
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly notificationsRepository: NotificationsRepository) {}
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    private readonly notificationsRepository: NotificationsRepository,
+    @Inject(FIRESTORE) private readonly firestore: admin.firestore.Firestore,
+  ) {}
+
+  /**
+   * Whether the recipient wants to receive a notification of the given type.
+   * Fail-open: any lookup error or missing preference defaults to `true`, so the
+   * existing notification behavior is preserved unless a user explicitly opts out.
+   */
+  private async isTypeEnabledForUser(userId: string, type: NotificationType): Promise<boolean> {
+    const prefKey = TYPE_TO_PREFERENCE[type];
+    if (!prefKey) return true;
+
+    try {
+      const snap = await this.firestore
+        .collection('profiles')
+        .where('userId', '==', userId)
+        .limit(1)
+        .get();
+      if (snap.empty) return true;
+      const prefs = (snap.docs[0].data() as any)?.notificationPreferences;
+      if (!prefs || prefs[prefKey] === undefined) return true;
+      return prefs[prefKey] !== false;
+    } catch (error: any) {
+      this.logger.warn(`Notification preference lookup failed for ${userId}: ${error?.message}`);
+      return true;
+    }
+  }
 
   /**
    * Get all notifications for a user
@@ -26,13 +69,15 @@ export class NotificationsService {
   }
 
   /**
-   * Create a generic notification
+   * Create a generic notification, honoring the recipient's per-type
+   * notification preferences. Returns `null` when the recipient has disabled
+   * that notification type.
    * @param userId User ID
    * @param type Notification type
    * @param title Title of the notification
    * @param message Message body
    * @param data Optional metadata payload
-   * @returns The created notification
+   * @returns The created notification, or null if suppressed by preferences
    */
   async createNotification(
     userId: string, 
@@ -40,7 +85,12 @@ export class NotificationsService {
     title: string, 
     message: string, 
     data?: Record<string, any>
-  ): Promise<AppNotification> {
+  ): Promise<AppNotification | null> {
+    const enabled = await this.isTypeEnabledForUser(userId, type);
+    if (!enabled) {
+      return null;
+    }
+
     const notificationData: Omit<AppNotification, 'id'> = {
       userId,
       type,
@@ -73,7 +123,7 @@ export class NotificationsService {
    * @param matchedUserName The matched user's name
    * @returns The created notification
    */
-  async notifyMatchFound(userId: string, matchId: string, matchedUserName: string): Promise<AppNotification> {
+  async notifyMatchFound(userId: string, matchId: string, matchedUserName: string): Promise<AppNotification | null> {
     return this.createNotification(
       userId,
       NotificationType.MATCH_FOUND,
@@ -89,7 +139,7 @@ export class NotificationsService {
    * @param conversationId The completed conversation ID
    * @returns The created notification
    */
-  async notifyConversationComplete(userId: string, conversationId: string): Promise<AppNotification> {
+  async notifyConversationComplete(userId: string, conversationId: string): Promise<AppNotification | null> {
     return this.createNotification(
       userId,
       NotificationType.CONVERSATION_COMPLETE,
@@ -104,7 +154,7 @@ export class NotificationsService {
    * @param userId The recipient user ID
    * @returns The created notification
    */
-  async notifyTwinUpdated(userId: string): Promise<AppNotification> {
+  async notifyTwinUpdated(userId: string): Promise<AppNotification | null> {
     return this.createNotification(
       userId,
       NotificationType.TWIN_UPDATED,

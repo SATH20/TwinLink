@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { MatchingController } from './matching.controller';
+import { MatchingController, DevMatchingController } from './matching.controller';
 import { MatchingService } from './matching.service';
 import { MatchingRepository } from './matching.repository';
 import { CandidateFilterEngine } from './engine/candidate-filter.engine';
@@ -16,7 +16,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     forwardRef(() => TwinsModule),
     NotificationsModule,
   ],
-  controllers: [MatchingController],
+  controllers: [MatchingController, DevMatchingController],
   providers: [
     MatchingService,
     MatchingRepository,

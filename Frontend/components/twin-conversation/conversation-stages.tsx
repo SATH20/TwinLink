@@ -6,14 +6,41 @@ import { Search, ScanSearch, MessageSquare, BarChart3, CheckCircle2 } from "luci
 import { cn } from "@/lib/utils"
 
 const STAGES = [
-  { id: "searching", label: "Searching", color: "#156d95", icon: Search, status: "complete" },
-  { id: "analysis", label: "Initial Analysis", color: "#0ea5e9", icon: ScanSearch, status: "complete" },
-  { id: "conversation", label: "Conversation", color: "#8b5cf6", icon: MessageSquare, status: "complete" },
-  { id: "evaluation", label: "Evaluation", color: "#f59e0b", icon: BarChart3, status: "complete" },
-  { id: "recommendation", label: "Recommendation", color: "#10b981", icon: CheckCircle2, status: "complete" },
+  { id: "searching", label: "Searching", color: "#156d95", icon: Search },
+  { id: "analysis", label: "Initial Analysis", color: "#0ea5e9", icon: ScanSearch },
+  { id: "conversation", label: "Conversation", color: "#8b5cf6", icon: MessageSquare },
+  { id: "evaluation", label: "Evaluation", color: "#f59e0b", icon: BarChart3 },
+  { id: "recommendation", label: "Recommendation", color: "#10b981", icon: CheckCircle2 },
 ]
 
-export function ConversationStages() {
+export function ConversationStages({
+  hasConversation = false,
+  analysisComplete = false,
+  status = "pending"
+}: {
+  hasConversation?: boolean
+  analysisComplete?: boolean
+  status?: string
+}) {
+  // Derive real progress from backend state.
+  // Stages 0-2 (Searching, Analysis, Conversation) are complete once the
+  // transcript exists. Stages 3-4 (Evaluation, Recommendation) complete once
+  // the compatibility analysis has finished.
+  const getStageStatus = (index: number): "complete" | "active" | "pending" => {
+    if (status === "FAILED") return "pending"
+
+    // Conversation transcript is available.
+    if (hasConversation) {
+      if (index <= 2) return "complete"
+      // Evaluation + Recommendation.
+      if (analysisComplete) return "complete"
+      // Evaluation is actively running; recommendation still pending.
+      return index === 3 ? "active" : "pending"
+    }
+
+    // No transcript yet: the conversation is being generated.
+    return index === 2 ? "active" : index < 2 ? "complete" : "pending"
+  }
   return (
     <div className="w-full bg-card/80 backdrop-blur-xl border border-border/80 rounded-2xl p-8 shadow-lg">
       <h3 className="text-lg font-semibold text-foreground mb-8" style={{ fontFamily: "Figtree" }}>
@@ -23,9 +50,10 @@ export function ConversationStages() {
       <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 lg:gap-0">
         {STAGES.map((stage, idx) => {
           const isLast = idx === STAGES.length - 1
-          const isActive = stage.status === "active"
-          const isComplete = stage.status === "complete"
-          const isPending = stage.status === "pending"
+          const stageStatus = getStageStatus(idx)
+          const isActive = stageStatus === "active"
+          const isComplete = stageStatus === "complete"
+          const isPending = stageStatus === "pending"
 
           return (
             <React.Fragment key={stage.id}>

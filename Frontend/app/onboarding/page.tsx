@@ -66,9 +66,11 @@ export default function OnboardingPage() {
   const router = useRouter()
 
   const handleNext = () => {
-    if (step < TOTAL_STEPS - 1) {
+    if (step < TOTAL_STEPS - 2) {
+      // Steps 0-8: advance to next step
       setStep(step + 1)
     } else {
+      // Step 9 (ReviewStep): trigger submission + twin generation
       handleComplete()
     }
   }
@@ -90,87 +92,121 @@ export default function OnboardingPage() {
    * 7. Redirect to Dashboard
    */
   const handleComplete = async () => {
+    console.log("1. handleComplete() called")
+
     // Prevent duplicate submissions
-    if (isSubmitting.current) return
+    if (isSubmitting.current) {
+      console.log("1a. Already submitting, returning early")
+      return
+    }
     isSubmitting.current = true
 
     // Validate before submission
     const validation = validateOnboardingData(formData)
     if (!validation.isValid) {
+      console.log("1b. Validation failed:", validation.errors)
       setApiError(validation.errors.join(". "))
       isSubmitting.current = false
       return
     }
+    console.log("2. Validation passed")
 
     // Reset state and show generating animation
     setApiError(null)
     setIsApiComplete(false)
     setIsLoading(true)
     setStep(10) // Show GeneratingTwinStep
+    console.log("3. Showing generating animation (step 10)")
 
     try {
       // Step 1: Get Clerk authentication token
+      console.log("4. Getting Clerk token...")
       const token = await getToken()
+      console.log("5. Token received:", token ? "OK (length=" + token.length + ")" : "NULL")
       if (!token) {
         throw new ApiError(401, "Authentication error. Please sign in again.", "AUTH_ERROR")
       }
 
       // Step 2: Register/sync user with backend
-      // This creates the user in Firestore if they don't exist
+      console.log("6. Registering user with backend...")
       try {
-        await registerUser(token)
+        await registerUser(token, user?.fullName ?? undefined)
+        console.log("7. User registered successfully")
       } catch (error) {
-        // If registration fails with a non-critical error, log and continue
-        // The profile update will create the user record anyway
         if (error instanceof ApiError && error.status !== 0) {
-          console.warn("User registration warning:", error.message)
+          console.warn("7. User registration warning (non-fatal):", error.message)
         } else {
           throw error
         }
       }
 
       // Step 3: Transform frontend data to backend DTO format
+      console.log("8. Transforming onboarding data...")
       const profilePayload = transformOnboardingData(formData)
+      console.log("9. Profile payload ready, keys:", Object.keys(profilePayload))
 
       // Step 4: Send profile data to backend
+      console.log("10. Calling updateProfile...")
       const profileResponse = await updateProfile(token, profilePayload)
-      console.log("Profile updated, completeness:", profileResponse.completenessScore)
+      console.log("11. Profile updated. Completeness:", profileResponse.completenessScore)
 
       // Step 5: Create Digital Twin
-      // Backend will: check completeness >= 60%, call FastAPI, store twin in Firestore
+      console.log("12. Calling createTwin...")
       try {
         const twinResponse = await createTwin(token)
-        console.log("Twin created:", twinResponse.id, "Status:", twinResponse.status)
+        console.log("13. Twin created. ID:", twinResponse.id, "Status:", twinResponse.status)
       } catch (error) {
         if (error instanceof ApiError && error.status === 409) {
-          // Twin already exists — this is fine, continue
-          console.log("Twin already exists, continuing...")
+          console.log("13. Twin already exists (409) — continuing")
         } else {
           throw error
         }
       }
 
       // Step 6: Mark onboarding as complete in Clerk metadata
-      await user?.update({
-        unsafeMetadata: {
-          ...user.unsafeMetadata,
-          onboardingComplete: true,
-          onboardingData: formData,
-        },
-      })
+      console.log("14. Updating Clerk metadata...")
+      try {
+        await user?.update({
+          unsafeMetadata: {
+            ...user.unsafeMetadata,
+            onboardingComplete: true,
+          },
+        })
+        console.log("15. Clerk metadata updated")
+      } catch (clerkError) {
+        // Non-fatal: Clerk metadata update failure should not block redirect
+        console.warn("15. Clerk metadata update failed (non-fatal):", clerkError)
+      }
 
-      // Step 7: Signal animation that API is done
+      // Step 7: Force Clerk to refresh the session token so the middleware
+      // sees the updated unsafeMetadata (onboardingComplete: true) in the new JWT.
+      // Without this, the middleware reads the stale token minted at sign-in time,
+      // sees onboardingComplete: undefined, and redirects back to /onboarding.
+      console.log("16. Forcing Clerk token refresh (skipCache: true)...")
+      await getToken({ skipCache: true })
+      console.log("17. Token refreshed — JWT now contains updated metadata")
+
+      // Step 8: Signal animation that API is done
+      console.log("18. Setting isApiComplete = true")
       setIsApiComplete(true)
-      // The GeneratingTwinStep component will call handleAnimationComplete
-      // when both the animation and API are finished
+
+      // Step 9: Redirect — wait briefly for animation to show 100%
+      console.log("19. Waiting 1500ms for animation to reach 100%...")
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      console.log("20. Calling router.replace('/dashboard')...")
+      router.replace("/dashboard")
+      console.log("21. router.replace() called — navigation in progress")
+
 
     } catch (error) {
-      console.error("Onboarding error:", error)
+      console.error("ERROR in handleComplete:", error)
       const message = getFriendlyErrorMessage(error)
       setApiError(message || "Something went wrong. Please try again.")
       isSubmitting.current = false
     }
   }
+
 
   /**
    * Called by GeneratingTwinStep when both the animation

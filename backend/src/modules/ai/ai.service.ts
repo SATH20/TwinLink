@@ -137,6 +137,7 @@ export class AiService {
 
   private handleHttpError(error: any): never {
     if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND') {
+      this.logger.error(`AI service unreachable: ${error.code}`);
       throw new ServiceUnavailableException('AI service is currently unavailable');
     }
 
@@ -145,16 +146,38 @@ export class AiService {
       error?.code === 'ETIMEDOUT' ||
       (typeof error?.message === 'string' && error.message.toLowerCase().includes('timeout'))
     ) {
+      this.logger.error(`AI service timeout: ${error.code || error.message}`);
       throw new GatewayTimeoutException('AI service request timed out');
     }
 
     if (error?.response) {
-      throw new HttpException(
-        error.response.data?.detail || error.response.data?.message || 'AI service error',
-        error.response.status || 500,
+      const status = error.response.status || 500;
+      const data = error.response.data;
+
+      // Log the full response from FastAPI for debugging
+      this.logger.error(
+        `AI service returned HTTP ${status}. Full response body: ${JSON.stringify(data, null, 2)}`,
       );
+
+      // FastAPI 422 returns structured validation errors in 'detail' (array of objects)
+      // Preserve the full detail so the caller can see exactly which fields failed
+      let errorMessage: string;
+      if (status === 422 && Array.isArray(data?.detail)) {
+        const fieldErrors = data.detail.map((err: any) => {
+          const loc = Array.isArray(err.loc) ? err.loc.join('.') : String(err.loc || '');
+          return `${loc}: ${err.msg}`;
+        });
+        errorMessage = `AI service validation failed: ${fieldErrors.join('; ')}`;
+        this.logger.error(`FastAPI 422 validation errors: ${fieldErrors.join('; ')}`);
+      } else {
+        errorMessage = data?.detail || data?.message || 'AI service error';
+      }
+
+      throw new HttpException(errorMessage, status);
     }
 
+    this.logger.error(`Unexpected AI service error: ${error?.message || error}`);
     throw new InternalServerErrorException('An unexpected error occurred while communicating with the AI service');
   }
+
 }

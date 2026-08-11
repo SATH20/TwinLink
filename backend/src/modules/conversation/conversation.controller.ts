@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam } from '@nestjs/swagger';
 import { ConversationService } from './conversation.service';
 import { StartConversationDto } from './dto/start-conversation.dto';
@@ -11,6 +11,8 @@ import { Conversation } from './entities/conversation.entity';
 @UseGuards(ClerkAuthGuard)
 @Controller('v1/conversation')
 export class ConversationController {
+  private readonly logger = new Logger(ConversationController.name);
+
   constructor(private readonly conversationService: ConversationService) {}
 
   @Post('start')
@@ -32,7 +34,18 @@ export class ConversationController {
   @ApiResponse({ status: 200, description: 'The conversation' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getConversation(@Param('id') id: string): Promise<Conversation> {
-    return this.conversationService.getConversation(id);
+    const conversation = await this.conversationService.getConversationForClient(id);
+
+    // [TEMP LOG 4] Status returned by GET /v1/conversation/:id — confirms what
+    // the frontend poller actually receives for this conversation.
+    this.logger.debug(
+      `[TEMP][GET /v1/conversation/${id}] status=${conversation?.status} ` +
+        `analysisComplete=${conversation?.analysisComplete} ` +
+        `compatibilityScore=${conversation?.compatibilityScore} ` +
+        `confidenceScore=${conversation?.confidenceScore}`,
+    );
+
+    return conversation;
   }
 
   @Get()

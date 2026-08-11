@@ -33,4 +33,16 @@ export class UsersRepository extends FirebaseRepository<User> {
     const doc = snapshot.docs[0];
     return { id: doc.id, ...doc.data() } as User;
   }
+
+  async findByUsername(username: string): Promise<User | null> {
+    const query = this.collection.where('username', '==', username).limit(1);
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      return null;
+    }
+
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() } as User;
+  }
 }

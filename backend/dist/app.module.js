@@ -24,6 +24,9 @@ const matching_module_1 = require("./modules/matching/matching.module");
 const conversation_module_1 = require("./modules/conversation/conversation.module");
 const compatibility_module_1 = require("./modules/compatibility/compatibility.module");
 const notifications_module_1 = require("./modules/notifications/notifications.module");
+const connections_module_1 = require("./modules/connections/connections.module");
+const messages_module_1 = require("./modules/messages/messages.module");
+const seed_module_1 = require("./modules/seed/seed.module");
 const health_controller_1 = require("./health.controller");
 let AppModule = class AppModule {
 };
@@ -57,6 +60,9 @@ exports.AppModule = AppModule = __decorate([
             conversation_module_1.ConversationModule,
             compatibility_module_1.CompatibilityModule,
             notifications_module_1.NotificationsModule,
+            connections_module_1.ConnectionsModule,
+            messages_module_1.MessagesModule,
+            seed_module_1.SeedModule,
         ],
         controllers: [health_controller_1.HealthController],
         providers: [
