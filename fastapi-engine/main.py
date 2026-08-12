@@ -1,69 +1,78 @@
+"""
+TwinLink AI Engine — FastAPI Service
+
+This service handles all AI/ML operations for the TwinLink platform:
+- Digital Twin generation from user profiles
+- Twin-to-twin conversation simulation
+- Compatibility analysis from conversation transcripts
+
+The NestJS backend orchestrates calls to this service.
+NestJS contains zero AI logic — this is the single source of truth.
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Dict, Any
-from matching import find_top_matches
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+from app.core.config import settings
+from app.routers import twin_router, conversation_router, compatibility_router
 
-# CORS configuration
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Application lifespan: startup and shutdown events."""
+    print(f"🚀 TwinLink AI Engine starting on {settings.HOST}:{settings.PORT}")
+    print(f"🔧 Environment: {settings.ENVIRONMENT}")
+    yield
+    print("🛑 TwinLink AI Engine shutting down")
+
+
+app = FastAPI(
+    title="TwinLink AI Engine",
+    description="AI service for Digital Twin generation, conversation simulation, and compatibility analysis.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# ── CORS ──────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class TwinInput(BaseModel):
-    interests: List[str]
-    communicationStyle: str
-    goals: str
-    personality: Dict[str, Any]
+# ── Routers ───────────────────────────────────────────────
+app.include_router(twin_router.router, prefix="/generate-twin", tags=["Twin Generation"])
+app.include_router(conversation_router.router, prefix="/conversation", tags=["Conversation"])
+app.include_router(compatibility_router.router, prefix="/compatibility", tags=["Compatibility"])
 
-class MatchRequest(BaseModel):
-    twin1: Dict[str, Any]
-    twins: List[Dict[str, Any]]
 
-@app.post("/generate-twin")
-async def generate_twin(data: TwinInput):
-    # AI-generated twin profile (dummy response)
-    twin_profile = {
-        "twinProfile": {
-            "personality": "Ambivert" if data.personality.get("extraversion", 0.5) > 0.4 and data.personality.get("extraversion", 0.5) < 0.7 else "Extrovert" if data.personality.get("extraversion", 0.5) >= 0.7 else "Introvert",
-            "communicationStyle": data.communicationStyle,
-            "interests": data.interests,
-            "goals": data.goals,
-            "matchScore": 85,
-            "traits": {
-                "openness": data.personality.get("openness", 0.5),
-                "extraversion": data.personality.get("extraversion", 0.5)
-            },
-            "bio": f"A {data.communicationStyle} communicator interested in {', '.join(data.interests[:2])}. {data.goals}",
-            "compatibility": {
-                "social": 0.82,
-                "intellectual": 0.88,
-                "emotional": 0.79
-            }
-        }
-    }
-    
-    return twin_profile
-
-@app.post("/match-twins")
-async def match_twins(data: MatchRequest):
-    """Find top compatible matches for a twin"""
-    
-    matches = find_top_matches(data.twin1, data.twins, top_n=5)
-    
-    return {
-        "matches": matches
-    }
-
-@app.get("/")
+@app.get("/", tags=["Health"])
 async def root():
-    return {"message": "FastAPI AI Engine is running"}
+    """Health check endpoint."""
+    return {
+        "service": "TwinLink AI Engine",
+        "status": "healthy",
+        "version": "1.0.0",
+    }
+
+
+@app.get("/health", tags=["Health"])
+async def health():
+    """Detailed health check."""
+    return {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "ai_provider": settings.AI_PROVIDER,
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app",
+        host=settings.HOST,
+        port=settings.PORT,
+        reload=settings.ENVIRONMENT == "development",
+    )
