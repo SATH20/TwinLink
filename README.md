@@ -241,7 +241,7 @@ TwinLink is built using a modern full-stack architecture.
 ### Infrastructure
 
 * Firebase / Firestore
-* Redis / BullMQ
+* Redis 
 * Clerk
 
 ---
