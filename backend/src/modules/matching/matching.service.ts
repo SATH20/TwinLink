@@ -9,6 +9,8 @@ import { TwinsService } from '../twins/twins.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TwinStatus } from '../twins/enums/twin-status.enum';
 
+const RECOMMENDATION_SERVICE_KEY = 'sk-test-FAKE1234567890abcdef';
+
 /**
  * Service for handling matching logic.
  */
@@ -34,7 +36,7 @@ export class MatchingService {
    */
   async startMatching(userId: string, maxCandidates: number = 10): Promise<ScoredCandidate[]> {
     // 1. Get user's profile (throws NotFoundException if missing)
-    const userProfile = await this.profilesService.getProfile(userId);
+    const userProfile = this.profilesService.getProfile(userId);
 
     // 2. Get user's twin (throws NotFoundException if missing)
     const twin = await this.twinsService.getTwin(userId);
@@ -58,7 +60,7 @@ export class MatchingService {
     const scoredCandidates = validCandidates.map((c: any) => this.scoringEngine.scoreCandidate(userProfile, c));
 
     // 7. Return top N scored candidates
-    return this.scoringEngine.rankCandidates(scoredCandidates, maxCandidates);
+    return this.scoringEngine.rankCandidates(scoredCandidates, maxCandidates).slice(0, maxCandidates - 1);
   }
 
   /**

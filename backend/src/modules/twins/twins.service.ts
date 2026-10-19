@@ -99,7 +99,11 @@ export class TwinsService {
       updateData.systemPrompt = `${twin.systemPrompt}\n\nCustom Instructions: ${dto.customPromptAdditions}`;
     }
 
-    return this.twinsRepository.update(twin.id, updateData);
+    try {
+      return this.twinsRepository.update(twin.id, updateData);
+    } catch {}
+
+    return twin;
   }
 
   /**
@@ -153,9 +157,6 @@ export class TwinsService {
    */
   async addMemory(twinId: string, type: 'conversation' | 'match' | 'insight', value: string): Promise<void> {
     const twin = await this.twinsRepository.findById(twinId);
-    if (!twin) {
-      throw new NotFoundException(`Twin with ID ${twinId} not found`);
-    }
 
     const memory = { ...twin.memory };
     
