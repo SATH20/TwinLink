@@ -77,9 +77,11 @@ export default function OnboardingPage() {
     setIsLoading(true)
 
     try {
-      await user?.update({
+      // `updateMetadata` deep-merges the partial payload into the existing
+      // unsafe metadata. `user.update({ unsafeMetadata })` now replaces the
+      // whole object and stores `null` values instead of removing keys.
+      await user?.updateMetadata({
         unsafeMetadata: {
-          ...user.unsafeMetadata,
           onboardingComplete: true,
           onboardingData: formData,
         },
